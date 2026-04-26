@@ -22,8 +22,14 @@ class PendingCorrection:
     wrong_pinyin: str
     correct_pinyin: str
     commit_key: str
+    wrong_committed_text: str = ""
 
-    def to_event(self, committed_text: str, source: str = "detector") -> CorrectionEvent | None:
+    def to_event(
+        self,
+        committed_text: str,
+        source: str = "detector",
+        wrong_committed_text: str | None = None,
+    ) -> CorrectionEvent | None:
         text = committed_text.strip()
         if not text:
             return None
@@ -33,6 +39,7 @@ class PendingCorrection:
             committed_text=text,
             commit_key=self.commit_key,
             source=source,
+            wrong_committed_text=wrong_committed_text or self.wrong_committed_text or None,
         )
 
 
@@ -42,6 +49,8 @@ class CorrectionDetector:
         self._wrong: str | None = None
         self._correct = ""
         self._editing = False
+        self._wrong_confirmed = False
+        self._wrong_committed_text = ""
 
     def feed(self, stroke: KeyStroke, committed_text: str | None = None) -> CorrectionEvent | None:
         pending = self.feed_pending(stroke)
@@ -57,17 +66,27 @@ class CorrectionDetector:
             if self._editing:
                 self._correct += char
             else:
+                if self._wrong_confirmed:
+                    self.reset()
                 self._current += char
             return None
 
         if stroke.kind in DELETE_KEYS:
-            if not self._editing and self._current:
+            if not self._editing and self._wrong_confirmed and self._wrong:
+                self._correct = ""
+                self._editing = True
+            elif not self._editing and self._current:
                 self._wrong = self._current
                 self._correct = ""
                 self._editing = True
             return None
 
         if stroke.kind in CONFIRM_KEYS:
+            if not self._editing and self._current:
+                self._wrong = normalize_pinyin(self._current)
+                self._current = ""
+                self._wrong_confirmed = bool(self._wrong)
+                return None
             pending = self._build_pending(stroke.kind)
             self.reset()
             return pending
@@ -83,6 +102,16 @@ class CorrectionDetector:
         self._wrong = None
         self._correct = ""
         self._editing = False
+        self._wrong_confirmed = False
+        self._wrong_committed_text = ""
+
+    def confirming_pinyin_candidate(self) -> str:
+        if self._editing or self._wrong_confirmed:
+            return ""
+        return normalize_pinyin(self._current)
+
+    def note_wrong_committed_text(self, text: str) -> None:
+        self._wrong_committed_text = text.strip()
 
     def _build_pending(self, commit_key: str) -> PendingCorrection | None:
         if not self._wrong or not self._correct:
@@ -95,6 +124,7 @@ class CorrectionDetector:
             wrong_pinyin=wrong,
             correct_pinyin=correct,
             commit_key=commit_key,
+            wrong_committed_text=self._wrong_committed_text,
         )
 
 

@@ -41,6 +41,52 @@ button {
   cursor: pointer;
 }
 
+.help-tip {
+  position: relative;
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
+.help-tip::after {
+  content: attr(data-help);
+  position: absolute;
+  z-index: 10;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: min(280px, 70vw);
+  padding: 9px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  background: #101828;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  white-space: normal;
+}
+
+.help-tip:hover::after,
+.help-tip:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 244px minmax(0, 1fr);
@@ -319,6 +365,11 @@ h2 {
   gap: 4px;
 }
 
+.switch-row strong {
+  display: inline-flex;
+  align-items: center;
+}
+
 .switch-row small {
   color: var(--muted);
   font-size: 12px;
@@ -373,6 +424,8 @@ input[type="checkbox"]:checked::after {
 }
 
 .field-row label {
+  display: inline-flex;
+  align-items: center;
   color: #344054;
   font-size: 13px;
 }
@@ -383,6 +436,8 @@ input[type="checkbox"]:checked::after {
 }
 
 .field-stack label {
+  display: inline-flex;
+  align-items: center;
   color: #344054;
   font-size: 13px;
 }
@@ -524,6 +579,42 @@ select:focus {
   margin-top: 10px;
 }
 
+.config-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.config-summary div {
+  min-width: 0;
+  border: 1px solid #e4eaf3;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.config-summary span,
+.config-summary strong {
+  display: block;
+}
+
+.config-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.config-summary strong {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #1f2937;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .compact-button {
   min-height: 38px;
   padding-inline: 12px;
@@ -588,7 +679,7 @@ select:focus {
 
 .record-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 16px;
   min-height: 58px;
@@ -617,6 +708,17 @@ select:focus {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.record-main {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.record-hint {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .record-code,
@@ -656,6 +758,109 @@ select:focus {
 
 .record-meta strong {
   color: #344054;
+  font-size: 12px;
+}
+
+.record-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.record-row.editing {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.record-edit-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 0;
+}
+
+.record-edit-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.record-edit-field span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.record-edit-field input {
+  min-height: 36px;
+}
+
+.record-edit-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.icon-action {
+  min-height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 4px 8px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.icon-action.danger {
+  border-color: #fecaca;
+  color: #b42318;
+}
+
+.file-list {
+  display: grid;
+  gap: 10px;
+}
+
+.file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid #eef2f7;
+  padding: 12px 0;
+}
+
+.file-row:last-child {
+  border-bottom: 0;
+}
+
+.file-main {
+  min-width: 0;
+}
+
+.file-main strong,
+.file-main code,
+.file-main span {
+  display: block;
+}
+
+.file-main strong {
+  font-size: 13px;
+}
+
+.file-main code {
+  margin-top: 6px;
+  overflow: hidden;
+  color: #1f2937;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-main span {
+  margin-top: 4px;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -744,7 +949,9 @@ select:focus {
   }
 
   .flow-grid,
-  .input-with-state {
+  .input-with-state,
+  .config-summary,
+  .record-edit-form {
     grid-template-columns: 1fr;
   }
 
@@ -756,7 +963,8 @@ select:focus {
     justify-content: flex-start;
   }
 
-  .record-row {
+  .record-row,
+  .file-row {
     grid-template-columns: 1fr;
   }
 

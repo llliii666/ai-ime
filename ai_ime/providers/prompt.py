@@ -25,7 +25,13 @@ Your output must match this shape:
 }
 Only recommend rules supported by the events. Use confidence from 0.0 to 1.0.
 Use higher weight for more confident and repeated rules.
-Keyboard logs are optional context only. Do not invent a rule from keyboard logs alone.
+Correction events are the strongest evidence.
+Keyboard log entries may include raw key events and semantic commit entries:
+- Raw key events have event_type "down" or "up" and contain key names.
+- Semantic commit entries have event_type "commit", pinyin, committed_text, and role.
+- role "candidate" means the user selected a candidate before later editing; role "correction" means the final corrected selection.
+You may infer a rule from key logs only when semantic commit entries show a candidate selection followed by deletion/backspace and a corrected selection.
+Do not derive rules from raw key events alone.
 If the evidence is insufficient, return {"rules": []}.
 Do not copy raw keyboard-log fragments into explanations.
 """
@@ -38,6 +44,7 @@ def build_user_prompt(events: list[CorrectionEvent], keylog_entries: list[KeyLog
                 "wrong_pinyin": event.wrong_pinyin,
                 "correct_pinyin": event.correct_pinyin,
                 "committed_text": event.committed_text,
+                "wrong_committed_text": event.wrong_committed_text,
                 "commit_key": event.commit_key,
                 "source": event.source,
             }
@@ -49,6 +56,9 @@ def build_user_prompt(events: list[CorrectionEvent], keylog_entries: list[KeyLog
                 "event_type": entry.event_type,
                 "name": entry.name,
                 "scan_code": entry.scan_code,
+                "pinyin": entry.pinyin,
+                "committed_text": entry.committed_text,
+                "role": entry.role,
             }
             for entry in (keylog_entries or [])
         ],

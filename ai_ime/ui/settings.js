@@ -72,6 +72,9 @@ function bindUi() {
   document.getElementById("provider_preset").addEventListener("change", applyProviderPreset);
   document.getElementById("provider").addEventListener("change", handleProviderTypeChange);
   document.getElementById("listener_enabled").addEventListener("change", syncTopbar);
+  ["openai_base_url", "openai_model", "ollama_base_url"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", renderModelSummary);
+  });
   syncActionState();
 }
 
@@ -90,10 +93,13 @@ async function loadState() {
   renderMeta(response.meta);
   populateProviderPresets(response.meta.providerPresets || []);
   syncModelPage();
+  renderModelSummary();
   syncTopbar();
   if (document.getElementById("records").classList.contains("active")) {
     await loadRecords();
   }
+  renderStoragePaths(response.meta.storagePaths || []);
+  renderModelSummary();
   setStatus("配置已读取", "ok");
 }
 
@@ -267,6 +273,9 @@ function showPage(pageId, skipRecordLoad = false) {
   if (pageId === "records" && !skipRecordLoad) {
     loadRecords();
   }
+  if (pageId === "files" && lastState) {
+    renderStoragePaths(lastState.meta.storagePaths || []);
+  }
 }
 
 function fillForm(settings) {
@@ -337,6 +346,7 @@ function applyProviderPreset() {
     resetModelSelect("请先测试连接");
     setProviderTestState("", "等待测试");
     syncModelPage();
+    renderModelSummary();
     syncTopbar();
     return;
   }
@@ -360,6 +370,7 @@ function applyProviderPreset() {
     setProviderTestState("", "等待测试");
   }
   syncModelPage();
+  renderModelSummary();
   syncTopbar();
   setStatus(`已应用接口预设：${preset.label}`, "ok");
 }
@@ -377,6 +388,7 @@ function handleProviderTypeChange() {
   }
   resetModelSelect("请先测试连接");
   syncModelPage();
+  renderModelSummary();
   syncTopbar();
 }
 
@@ -406,10 +418,6 @@ function syncModelPage() {
   document.getElementById("openaiProviderConfig").classList.toggle("active", provider === "openai-compatible");
   document.getElementById("ollamaProviderConfig").classList.toggle("active", provider === "ollama");
   document.getElementById("mockProviderConfig").classList.toggle("active", provider === "mock");
-  const modelLabel = document.querySelector('label[for="openai_model"]');
-  if (modelLabel) {
-    modelLabel.textContent = "手动模型名";
-  }
   if (provider === "ollama" && !document.getElementById("openai_model").value.trim()) {
     document.getElementById("openai_model").value = document.getElementById("ollama_model").value.trim();
   }
@@ -417,6 +425,7 @@ function syncModelPage() {
     renderModelOptions(["mock-model"]);
     setProviderTestState("ok", "本地模拟无需连接测试");
   }
+  renderModelSummary();
 }
 
 function resetModelSelect(label) {
@@ -455,6 +464,7 @@ function applySelectedModel() {
   }
   document.getElementById("openai_model").value = value;
   syncActiveModelInput();
+  renderModelSummary();
 }
 
 function activeModelValue() {
@@ -471,6 +481,27 @@ function syncActiveModelInput() {
   if (provider === "ollama") {
     document.getElementById("ollama_model").value = model;
   }
+  renderModelSummary();
+}
+
+function renderModelSummary() {
+  const provider = document.getElementById("provider")?.value || "";
+  const summaryProvider = document.getElementById("summaryProvider");
+  const summaryBaseUrl = document.getElementById("summaryBaseUrl");
+  const summaryModel = document.getElementById("summaryModel");
+  if (!summaryProvider || !summaryBaseUrl || !summaryModel) {
+    return;
+  }
+  const presetSelect = document.getElementById("provider_preset");
+  const presetLabel = presetSelect?.selectedOptions?.[0]?.textContent || "自定义";
+  const baseUrl = provider === "ollama"
+    ? document.getElementById("ollama_base_url").value.trim()
+    : provider === "mock"
+      ? "本地模拟"
+      : document.getElementById("openai_base_url").value.trim();
+  summaryProvider.textContent = `${providerLabels[provider] || provider || "未选择"} · ${presetLabel}`;
+  summaryBaseUrl.textContent = baseUrl || "未填写";
+  summaryModel.textContent = activeModelValue() || "未选择";
 }
 
 function setProviderTestState(type, message) {
@@ -491,11 +522,14 @@ function renderRecords(records) {
     row.style.setProperty("--i", String(Math.min(index, 12)));
     row.appendChild(renderRecordTriple(record));
     row.appendChild(renderRecordMeta(record));
+    row.appendChild(renderRecordActions(record));
     list.appendChild(row);
   });
 }
 
 function renderRecordTriple(record) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "record-main";
   const triple = document.createElement("div");
   triple.className = "record-triple";
   triple.appendChild(recordToken(record.wrongPinyin || "", "record-code"));
@@ -503,7 +537,14 @@ function renderRecordTriple(record) {
   triple.appendChild(recordToken(record.correctPinyin || "", "record-code"));
   triple.appendChild(recordArrow());
   triple.appendChild(recordToken(record.committedText || "", "record-text"));
-  return triple;
+  wrapper.appendChild(triple);
+  if (record.wrongCommittedText) {
+    const wrongText = document.createElement("span");
+    wrongText.className = "record-hint";
+    wrongText.textContent = `错误候选：${record.wrongCommittedText}`;
+    wrapper.appendChild(wrongText);
+  }
+  return wrapper;
 }
 
 function renderRecordMeta(record) {
@@ -518,6 +559,109 @@ function renderRecordMeta(record) {
     meta.appendChild(recordSmall(record.createdAt || ""));
   }
   return meta;
+}
+
+function renderRecordActions(record) {
+  const actions = document.createElement("div");
+  actions.className = "record-actions";
+  const edit = document.createElement("button");
+  edit.className = "icon-action";
+  edit.textContent = "修改";
+  edit.addEventListener("click", () => editRecord(record, actions.closest(".record-row")));
+  const remove = document.createElement("button");
+  remove.className = "icon-action danger";
+  remove.textContent = "删除";
+  remove.addEventListener("click", () => deleteRecord(record));
+  actions.appendChild(edit);
+  actions.appendChild(remove);
+  return actions;
+}
+
+function editRecord(record, row) {
+  if (!row) {
+    return;
+  }
+  row.classList.add("editing");
+  row.replaceChildren(renderRecordEditor(record));
+}
+
+function renderRecordEditor(record) {
+  const form = document.createElement("div");
+  form.className = "record-edit-form";
+  form.appendChild(recordEditField("错误拼音", "wrongPinyin", record.wrongPinyin || ""));
+  form.appendChild(recordEditField("正确拼音", "correctPinyin", record.correctPinyin || ""));
+  if (activeRecordKind === "events") {
+    form.appendChild(recordEditField("错误候选", "wrongCommittedText", record.wrongCommittedText || ""));
+  }
+  form.appendChild(recordEditField("正确汉字", "committedText", record.committedText || ""));
+  const actions = document.createElement("div");
+  actions.className = "record-edit-actions";
+  const save = document.createElement("button");
+  save.className = "primary compact-button";
+  save.textContent = "保存";
+  save.addEventListener("click", () => saveEditedRecord(record, form));
+  const cancel = document.createElement("button");
+  cancel.className = "secondary compact-button";
+  cancel.textContent = "取消";
+  cancel.addEventListener("click", loadRecords);
+  actions.appendChild(save);
+  actions.appendChild(cancel);
+  form.appendChild(actions);
+  return form;
+}
+
+function recordEditField(labelText, key, value) {
+  const label = document.createElement("label");
+  label.className = "record-edit-field";
+  const span = document.createElement("span");
+  span.textContent = labelText;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.dataset.edit = key;
+  input.spellcheck = false;
+  label.appendChild(span);
+  label.appendChild(input);
+  return label;
+}
+
+async function saveEditedRecord(record, form) {
+  if (!apiReady()) {
+    return;
+  }
+  const payload = {
+    ...record,
+    wrongPinyin: form.querySelector('[data-edit="wrongPinyin"]').value.trim(),
+    correctPinyin: form.querySelector('[data-edit="correctPinyin"]').value.trim(),
+    committedText: form.querySelector('[data-edit="committedText"]').value.trim(),
+    wrongCommittedText: form.querySelector('[data-edit="wrongCommittedText"]')?.value.trim() || "",
+  };
+  const response = await window.pywebview.api.update_correction_record(activeRecordKind, record.id, {
+    ...payload,
+  });
+  if (!response.ok) {
+    setStatus(response.message || "更新失败", "error");
+    return;
+  }
+  setStatus(response.message || "记录已更新", "ok");
+  await loadState();
+}
+
+async function deleteRecord(record) {
+  if (!apiReady()) {
+    return;
+  }
+  const ok = window.confirm(`删除这条${activeRecordKind === "events" ? "纠错事件" : "启用规则"}？\n${record.wrongPinyin} -> ${record.correctPinyin} -> ${record.committedText}`);
+  if (!ok) {
+    return;
+  }
+  const response = await window.pywebview.api.delete_correction_record(activeRecordKind, record.id);
+  if (!response.ok) {
+    setStatus(response.message || "删除失败", "error");
+    return;
+  }
+  setStatus(response.message || "记录已删除", "ok");
+  await loadState();
 }
 
 function recordToken(text, className) {
@@ -547,6 +691,46 @@ function recordSmall(text) {
   const small = document.createElement("span");
   small.textContent = text || "";
   return small;
+}
+
+function renderStoragePaths(paths) {
+  const list = document.getElementById("fileList");
+  if (!list) {
+    return;
+  }
+  list.replaceChildren();
+  (Array.isArray(paths) ? paths : []).forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "file-row";
+    const main = document.createElement("div");
+    main.className = "file-main";
+    const title = document.createElement("strong");
+    title.textContent = item.label || item.id || "文件";
+    const path = document.createElement("code");
+    path.textContent = item.path || "";
+    const desc = document.createElement("span");
+    desc.textContent = item.description || "";
+    main.appendChild(title);
+    main.appendChild(path);
+    main.appendChild(desc);
+    const button = document.createElement("button");
+    button.className = "secondary compact-button";
+    button.textContent = "打开位置";
+    button.addEventListener("click", () => openStoragePath(item.path));
+    row.appendChild(main);
+    row.appendChild(button);
+    list.appendChild(row);
+  });
+}
+
+async function openStoragePath(path) {
+  if (!apiReady()) {
+    return;
+  }
+  const response = await window.pywebview.api.open_location(path || "");
+  if (!response.ok) {
+    setStatus(response.message || "打开位置失败", "error");
+  }
 }
 
 function syncTopbar() {
@@ -590,7 +774,9 @@ function applyInitialState() {
     fillForm(state.settings);
     renderMeta(state.meta);
     populateProviderPresets(state.meta.providerPresets || []);
+    renderStoragePaths(state.meta.storagePaths || []);
     syncModelPage();
+    renderModelSummary();
     syncTopbar();
     setStatus("配置已预载，正在连接本地后端");
   } catch {

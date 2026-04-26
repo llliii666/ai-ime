@@ -11,6 +11,7 @@ class CorrectionEvent:
     commit_key: str = "unknown"
     source: str = "manual"
     app_id_hash: str | None = None
+    wrong_committed_text: str | None = None
     id: int | None = None
     created_at: str | None = None
 

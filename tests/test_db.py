@@ -4,15 +4,18 @@ import unittest
 from ai_ime.correction.rules import aggregate_rules
 from ai_ime.db import (
     clear_events,
+    delete_event,
     delete_rule,
     init_db,
     insert_event,
     list_events,
     list_rules,
     set_rule_enabled,
+    update_event,
+    update_rule,
     upsert_rules,
 )
-from ai_ime.models import CorrectionEvent
+from ai_ime.models import CorrectionEvent, LearnedRule
 
 
 class DatabaseTests(unittest.TestCase):
@@ -55,6 +58,44 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(list_events(conn), [])
         self.assertTrue(delete_rule(conn, rule_id))
         self.assertEqual(list_rules(conn), [])
+
+    def test_update_event_and_rule(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+
+        event_id = insert_event(
+            conn,
+            CorrectionEvent(
+                "xainzai",
+                "xianzai",
+                "现在",
+                wrong_committed_text="喜爱能在",
+            ),
+        )
+        self.assertTrue(
+            update_event(
+                conn,
+                event_id,
+                CorrectionEvent("xainzai", "xianzai", "现在", wrong_committed_text="喜爱能再"),
+            )
+        )
+        self.assertEqual(list_events(conn)[0].wrong_committed_text, "喜爱能再")
+        self.assertTrue(delete_event(conn, event_id))
+
+        upsert_rules(
+            conn,
+            [LearnedRule("xainzai", "xianzai", "现在", 0.8, 141000, 1, "manual")],
+        )
+        rule_id = list_rules(conn)[0].id
+        self.assertTrue(
+            update_rule(
+                conn,
+                rule_id,
+                LearnedRule("xainzai", "xianzai", "现在", 0.9, 150000, 2, "manual_edit"),
+            )
+        )
+        self.assertEqual(list_rules(conn)[0].confidence, 0.9)
 
 
 if __name__ == "__main__":

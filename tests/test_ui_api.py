@@ -138,6 +138,49 @@ class SettingsApiTests(unittest.TestCase):
                 self.assertEqual([event["wrongPinyin"] for event in response["events"]], ["anli", "zuihou"])
                 self.assertEqual(len(response["rules"]), 1)
                 self.assertEqual(response["rules"][0]["committedText"], "案例")
+                self.assertIn("storagePaths", api.load_state()["meta"])
+        finally:
+            if old_local_app_data is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = old_local_app_data
+
+    def test_update_and_delete_correction_records(self) -> None:
+        old_local_app_data = os.environ.get("LOCALAPPDATA")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["LOCALAPPDATA"] = str(Path(tmp) / "LocalAppData")
+                db_path = Path(tmp) / "ai-ime.db"
+                api = SettingsApi(env_path=Path(tmp) / ".env", db_path=db_path)
+                with closing(connect(db_path)) as conn:
+                    init_db(conn)
+                    event_id = insert_event(
+                        conn,
+                        CorrectionEvent(
+                            "xainzai",
+                            "xianzai",
+                            "现在",
+                            wrong_committed_text="喜爱能在",
+                            source="test",
+                        ),
+                    )
+
+                response = api.update_correction_record(
+                    "events",
+                    event_id,
+                    {
+                        "wrongPinyin": "xainzai",
+                        "correctPinyin": "xianzai",
+                        "committedText": "现在",
+                        "wrongCommittedText": "喜爱能再",
+                    },
+                )
+                self.assertTrue(response["ok"])
+                self.assertEqual(api.list_correction_records()["events"][0]["wrongCommittedText"], "喜爱能再")
+
+                delete_response = api.delete_correction_record("events", event_id)
+                self.assertTrue(delete_response["ok"])
+                self.assertEqual(api.list_correction_records()["events"], [])
         finally:
             if old_local_app_data is None:
                 os.environ.pop("LOCALAPPDATA", None)
