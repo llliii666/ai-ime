@@ -23,10 +23,17 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
+  height: 100%;
   min-width: 920px;
   min-height: 640px;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
 }
@@ -90,13 +97,17 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: 244px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   padding: 22px 16px;
   background: var(--nav);
   color: #ffffff;
@@ -192,8 +203,10 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 26px 30px 20px;
 }
 
@@ -253,12 +266,16 @@ h2 {
 .page {
   display: none;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   opacity: 0;
   transform: translateY(8px);
 }
 
 .page.active {
   display: block;
+  overflow-y: auto;
+  padding-right: 4px;
   animation: pageIn 180ms ease forwards;
 }
 

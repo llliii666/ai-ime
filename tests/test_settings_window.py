@@ -38,6 +38,8 @@ class SettingsWindowTests(unittest.TestCase):
             self.assertIn("已保存接口", html)
             self.assertIn("renderSavedModelSummary", html)
             self.assertNotIn("renderModelSummary", html)
+            self.assertIn("grid-template-rows: auto minmax(0, 1fr) auto", html)
+            self.assertIn("overflow-y: auto", html)
             self.assertIn("<script>", html)
             self.assertNotIn('href="./settings.css"', html)
             self.assertNotIn('src="./settings.js"', html)
