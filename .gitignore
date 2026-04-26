@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.data/
+.omx/logs/
+.omx/state/
+.omx/metrics.json
+dist/
+build/
+*.egg-info/

@@ -1,0 +1,7 @@
+[project]
+name = "ai-ime"
+version = "0.1.0"
+description = "Personal pinyin typo learning helper for Rime on Windows"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
