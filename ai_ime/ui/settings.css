@@ -360,17 +360,20 @@ h2 {
   border-bottom: 0;
 }
 
-.switch-row span {
-  display: grid;
-  gap: 4px;
+.switch-row > span {
+  display: block;
+  min-width: 0;
 }
 
-.switch-row strong {
-  display: inline-flex;
-  align-items: center;
+.switch-row > span > strong,
+.switch-row > span > .help-tip {
+  display: inline-grid;
+  vertical-align: middle;
 }
 
 .switch-row small {
+  display: block;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 12px;
 }
