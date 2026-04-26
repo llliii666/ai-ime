@@ -10,8 +10,9 @@ from pathlib import Path
 from ai_ime.config import default_data_dir
 from ai_ime.models import LearnedRule
 from ai_ime.rime.generator import (
+    AI_IME_LUA_BOOTSTRAP_START,
     AI_IME_LUA_PROCESSOR,
-    merge_lua_bootstrap,
+    remove_lua_bootstrap,
     render_dictionary,
     render_lua_logger,
     render_lua_processor_patch,
@@ -27,7 +28,7 @@ class DeploymentResult:
     dictionary_path: Path
     patch_path: Path
     lua_path: Path
-    rime_lua_path: Path
+    rime_lua_path: Path | None
     backup_dir: Path
     patch_applied: bool
 
@@ -75,18 +76,14 @@ def deploy_rime_files(
     lua_path.parent.mkdir(parents=True, exist_ok=True)
     lua_path.write_text(render_lua_logger(log_path, enabled=semantic_logger_enabled), encoding="utf-8", newline="\n")
 
-    existing_rime_lua = rime_lua_path.read_text(encoding="utf-8-sig") if rime_lua_path.exists() else ""
-    merged_rime_lua = merge_lua_bootstrap(existing_rime_lua)
-    if existing_rime_lua != merged_rime_lua:
-        _backup_target(rime_lua_path, backup_dir, manifest, root=rime_dir)
-        rime_lua_path.write_text(merged_rime_lua, encoding="utf-8", newline="\n")
+    legacy_rime_lua_path = _remove_legacy_rime_lua_bootstrap(rime_lua_path, backup_dir, manifest, root=rime_dir)
 
     _write_manifest(backup_dir, manifest)
     return DeploymentResult(
         dictionary_path=dictionary_path,
         patch_path=patch_path,
         lua_path=lua_path,
-        rime_lua_path=rime_lua_path,
+        rime_lua_path=legacy_rime_lua_path,
         backup_dir=backup_dir,
         patch_applied=patch_applied,
     )
@@ -247,3 +244,25 @@ def _write_manifest(backup_dir: Path, manifest: dict[str, list[dict[str, object]
 
 def _render_ai_schema_patch_body(dictionary_id: str) -> str:
     return render_lua_processor_patch() + render_typo_translator_patch(dictionary_id=dictionary_id)
+
+
+def _remove_legacy_rime_lua_bootstrap(
+    rime_lua_path: Path,
+    backup_dir: Path,
+    manifest: dict[str, list[dict[str, object]]],
+    root: Path,
+) -> Path | None:
+    if not rime_lua_path.exists():
+        return None
+    existing = rime_lua_path.read_text(encoding="utf-8-sig")
+    if AI_IME_LUA_BOOTSTRAP_START not in existing:
+        return None
+    cleaned = remove_lua_bootstrap(existing)
+    if existing == cleaned:
+        return None
+    _backup_target(rime_lua_path, backup_dir, manifest, root=root)
+    if cleaned.strip():
+        rime_lua_path.write_text(cleaned, encoding="utf-8", newline="\n")
+    else:
+        rime_lua_path.unlink()
+    return rime_lua_path

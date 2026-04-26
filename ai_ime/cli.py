@@ -417,7 +417,8 @@ def handle_deploy_rime(args: argparse.Namespace) -> int:
     else:
         print(f"Existing schema patch was not overwritten. Pending patch: {result.patch_path}")
     print(f"Deployed Rime Lua logger: {result.lua_path}")
-    print(f"Updated Rime Lua bootstrap: {result.rime_lua_path}")
+    if result.rime_lua_path is not None:
+        print(f"Removed legacy Rime Lua bootstrap: {result.rime_lua_path}")
     print(f"Backup directory: {result.backup_dir}")
     return 0
 

@@ -260,7 +260,7 @@ class SettingsApi:
             "dictionaryPath": str(result.dictionary_path),
             "patchPath": str(result.patch_path),
             "luaPath": str(result.lua_path),
-            "rimeLuaPath": str(result.rime_lua_path),
+            "rimeLuaPath": str(result.rime_lua_path or ""),
             "backupDir": str(result.backup_dir),
         }
 

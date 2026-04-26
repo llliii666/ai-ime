@@ -29,17 +29,15 @@ class RimeDeployTests(unittest.TestCase):
             self.assertTrue(result.dictionary_path.exists())
             self.assertTrue(result.patch_path.exists())
             self.assertTrue(result.lua_path.exists())
-            self.assertTrue(result.rime_lua_path.exists())
+            self.assertIsNone(result.rime_lua_path)
             self.assertTrue(result.patch_applied)
 
             restored = rollback_backup(rime_dir, result.backup_dir)
             self.assertIn(result.dictionary_path, restored)
             self.assertIn(result.lua_path, restored)
-            self.assertIn(result.rime_lua_path, restored)
             self.assertFalse(result.dictionary_path.exists())
             self.assertFalse(result.patch_path.exists())
             self.assertFalse(result.lua_path.exists())
-            self.assertFalse(result.rime_lua_path.exists())
 
     def test_existing_patch_is_merged_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -52,16 +50,22 @@ class RimeDeployTests(unittest.TestCase):
             self.assertTrue(result.patch_applied)
             content = existing_patch.read_text(encoding="utf-8")
             self.assertIn("engine/translators/@before 1: table_translator@ai_typo", content)
-            self.assertIn("engine/processors/@before 0: lua_processor@ai_ime_logger_processor", content)
+            self.assertIn("engine/processors/@before 0: lua_processor@*ai_ime_logger", content)
             self.assertIn("ai_typo:\n    dictionary: ai_typo", content)
             self.assertIn("menu/page_size: 9", content)
             self.assertEqual(result.patch_path, existing_patch)
 
-    def test_deploy_appends_rime_lua_bootstrap_without_replacing_custom_code(self) -> None:
+    def test_deploy_removes_legacy_rime_lua_bootstrap_without_replacing_custom_code(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             rime_dir = Path(tmp)
             rime_lua = rime_dir / "rime.lua"
-            rime_lua.write_text("local keep = true\n", encoding="utf-8")
+            rime_lua.write_text(
+                "local keep = true\n"
+                "-- AI IME logger bootstrap: start\n"
+                "old = true\n"
+                "-- AI IME logger bootstrap: end\n",
+                encoding="utf-8",
+            )
 
             result = deploy_rime_files(sample_rules(), rime_dir, semantic_log_path=Path(tmp) / "keylog.jsonl")
 
@@ -69,7 +73,8 @@ class RimeDeployTests(unittest.TestCase):
             self.assertIn("LOG_PATH = [[" + str(Path(tmp) / "keylog.jsonl") + "]]", result.lua_path.read_text(encoding="utf-8"))
             content = rime_lua.read_text(encoding="utf-8")
             self.assertIn("local keep = true", content)
-            self.assertIn('ai_ime_logger_processor = ai_ime_logger.processor', content)
+            self.assertNotIn("old = true", content)
+            self.assertEqual(result.rime_lua_path, rime_lua)
 
     def test_merge_schema_patch_appends_top_level_patch(self) -> None:
         content = "__include: octagram\n\noctagram:\n  __patch:\n    translator/max_homophones: 5\n"
@@ -77,7 +82,7 @@ class RimeDeployTests(unittest.TestCase):
         merged = merge_schema_patch(content)
 
         self.assertIn("octagram:\n  __patch:\n    translator/max_homophones: 5", merged)
-        self.assertIn("\npatch:\n  engine/processors/@before 0: lua_processor@ai_ime_logger_processor\n", merged)
+        self.assertIn("\npatch:\n  engine/processors/@before 0: lua_processor@*ai_ime_logger\n", merged)
         self.assertIn("engine/translators/@before 1: table_translator@ai_typo", merged)
 
     def test_merge_schema_patch_removes_legacy_dictionary_override(self) -> None:
@@ -110,7 +115,7 @@ class RimeDeployTests(unittest.TestCase):
 
         self.assertNotIn("dictionary: old", merged)
         self.assertNotIn("@before 3", merged)
-        self.assertIn("engine/processors/@before 0: lua_processor@ai_ime_logger_processor", merged)
+        self.assertIn("engine/processors/@before 0: lua_processor@*ai_ime_logger", merged)
         self.assertIn("engine/translators/@before 1: table_translator@ai_typo", merged)
         self.assertIn("ai_typo:\n    dictionary: ai_typo", merged)
         self.assertIn("menu/page_size: 9", merged)
@@ -118,14 +123,14 @@ class RimeDeployTests(unittest.TestCase):
     def test_merge_schema_patch_replaces_existing_lua_processor(self) -> None:
         content = (
             "patch:\n"
-            "  engine/processors/@before 5: lua_processor@ai_ime_logger_processor\n"
+            "  engine/processors/@before 5: lua_processor@*ai_ime_logger\n"
             "  menu/page_size: 9\n"
         )
 
         merged = merge_schema_patch(content, dictionary_id="ai_typo")
 
         self.assertNotIn("@before 5", merged)
-        self.assertEqual(merged.count("lua_processor@ai_ime_logger_processor"), 1)
+        self.assertEqual(merged.count("lua_processor@*ai_ime_logger"), 1)
         self.assertIn("menu/page_size: 9", merged)
 
 

@@ -112,7 +112,6 @@ uv run python -m ai_ime deploy-rime --rime-dir "$env:APPDATA\Rime"
 部署 Rime 时，AI IME 现在会额外写入：
 
 - `%APPDATA%\Rime\lua\ai_ime_logger.lua`：Rime 内部 Lua 插件，用来记录候选词上屏事件。
-- `%APPDATA%\Rime\rime.lua`：追加 AI IME 引导块，不会覆盖已有自定义代码。
-- `%APPDATA%\Rime\<schema>.custom.yaml`：注册 `lua_processor@ai_ime_logger_processor` 和 `table_translator@ai_typo`。
+- `%APPDATA%\Rime\<schema>.custom.yaml`：注册 `lua_processor@*ai_ime_logger` 和 `table_translator@ai_typo`。
 
 完成部署后必须执行一次“小狼毫重新部署”。重新部署后，使用小狼毫输入并选择候选词时，`keylog.jsonl` 中应该出现 `source: rime-lua`、`role: rime_commit`、`committed_text`、`candidate_text` 等字段。这样模型可以看到“错误拼音 -> 错误候选 -> 删除 -> 正确拼音 -> 正确候选”的完整语义链路。

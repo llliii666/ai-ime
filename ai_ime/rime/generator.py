@@ -5,7 +5,7 @@ from pathlib import Path
 from ai_ime.models import LearnedRule
 
 AI_IME_LUA_MODULE = "ai_ime_logger"
-AI_IME_LUA_PROCESSOR = "ai_ime_logger_processor"
+AI_IME_LUA_PROCESSOR = "*ai_ime_logger"
 AI_IME_LUA_BOOTSTRAP_START = "-- AI IME logger bootstrap: start"
 AI_IME_LUA_BOOTSTRAP_END = "-- AI IME logger bootstrap: end"
 
@@ -70,7 +70,7 @@ def render_typo_translator_patch(dictionary_id: str = "ai_typo") -> str:
 
 def render_lua_bootstrap(
     module_name: str = AI_IME_LUA_MODULE,
-    processor_name: str = AI_IME_LUA_PROCESSOR,
+    processor_name: str = "ai_ime_logger_processor",
 ) -> str:
     return (
         f"{AI_IME_LUA_BOOTSTRAP_START}\n"
@@ -81,12 +81,16 @@ def render_lua_bootstrap(
 
 
 def merge_lua_bootstrap(content: str) -> str:
-    lines = _remove_generated_lua_bootstrap(content.splitlines())
+    lines = _remove_generated_lua_bootstrap_lines(content.splitlines())
     prefix = "\n".join(lines).rstrip()
     bootstrap = render_lua_bootstrap().rstrip()
     if prefix:
         return f"{prefix}\n\n{bootstrap}\n"
     return f"{bootstrap}\n"
+
+
+def remove_lua_bootstrap(content: str) -> str:
+    return "\n".join(_remove_generated_lua_bootstrap_lines(content.splitlines())).rstrip() + "\n"
 
 
 def render_lua_logger(log_path: Path, enabled: bool = True) -> str:
@@ -353,7 +357,7 @@ def _render_import_tables(base_dictionary: str) -> str:
     return f"import_tables:\n  - {base_dictionary.strip()}"
 
 
-def _remove_generated_lua_bootstrap(lines: list[str]) -> list[str]:
+def _remove_generated_lua_bootstrap_lines(lines: list[str]) -> list[str]:
     output: list[str] = []
     skipping = False
     for line in lines:
