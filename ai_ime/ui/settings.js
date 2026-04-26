@@ -58,6 +58,7 @@ function bindUi() {
   document.getElementById("deployRime").addEventListener("click", deployRime);
   document.getElementById("openRimeDir").addEventListener("click", openRimeDir);
   document.getElementById("testProvider").addEventListener("click", testProvider);
+  document.getElementById("runAnalysisNow").addEventListener("click", runAnalysisNow);
   document.getElementById("model_select").addEventListener("change", applySelectedModel);
   document.getElementById("addManualCorrection").addEventListener("click", addManualCorrection);
   document.getElementById("openKeylogFile").addEventListener("click", () => openRecordFile("keylog"));
@@ -171,6 +172,29 @@ async function testProvider() {
   renderModelOptions(response.models || []);
   setProviderTestState("ok", response.message || "模型连接正常");
   setStatus(response.message || "模型连接正常", "ok");
+}
+
+async function runAnalysisNow() {
+  if (!apiReady()) {
+    return;
+  }
+  renderAnalysisNowResult(null);
+  setAnalysisNowState("testing", "正在提交");
+  setStatus("正在提交键入日志给模型");
+  const response = await window.pywebview.api.run_analysis_now(collectPayload());
+  if (!response.ok) {
+    setAnalysisNowState("error", response.message || "立即提交失败");
+    setStatus(response.message || "立即提交失败", "error");
+    return;
+  }
+  renderAnalysisNowResult(response);
+  await loadState();
+  const message = response.message || "立即提交完成";
+  setAnalysisNowState(response.attempted ? "ok" : "", message);
+  setStatus(message, response.attempted ? "ok" : "");
+  if (document.getElementById("records").classList.contains("active")) {
+    await loadRecords();
+  }
 }
 
 async function addManualCorrection() {
@@ -542,6 +566,94 @@ function setProviderTestState(type, message) {
   node.className = `connection-state ${type || ""}`.trim();
 }
 
+function setAnalysisNowState(type, message) {
+  const node = document.getElementById("analysisNowState");
+  if (!node) {
+    return;
+  }
+  node.textContent = message;
+  node.className = `connection-state ${type || ""}`.trim();
+}
+
+function renderAnalysisNowResult(response) {
+  const container = document.getElementById("analysisNowResult");
+  if (!container) {
+    return;
+  }
+  container.replaceChildren();
+  container.classList.toggle("active", Boolean(response));
+  if (!response) {
+    return;
+  }
+
+  const summary = document.createElement("div");
+  summary.className = "analysis-summary";
+  summary.appendChild(analysisSummaryItem("提交事件", `${response.sentEventCount ?? 0} 条`));
+  summary.appendChild(analysisSummaryItem("新增事件", `${response.newEventCount ?? 0} 条`));
+  summary.appendChild(analysisSummaryItem("键盘日志", `${response.sentKeylogCount ?? 0}/${response.keylogCount ?? 0}`));
+  summary.appendChild(analysisSummaryItem("模型返回", `${response.returnedRules ?? 0} 条`));
+  summary.appendChild(analysisSummaryItem("写入规则", `${response.upsertedRules ?? 0} 条`));
+  summary.appendChild(analysisSummaryItem("本地拒绝", `${response.rejectedRules ?? 0} 条`));
+  container.appendChild(summary);
+
+  const accepted = Array.isArray(response.rules) ? response.rules : [];
+  const rejected = Array.isArray(response.rejectedRuleItems) ? response.rejectedRuleItems : [];
+  if (accepted.length === 0 && rejected.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "analysis-empty";
+    empty.textContent = "模型没有返回通过本地证据校验的新规则。";
+    container.appendChild(empty);
+    return;
+  }
+  container.appendChild(renderAnalysisRuleGroup("已写入或更新", accepted, "accepted"));
+  container.appendChild(renderAnalysisRuleGroup("已被本地拒绝", rejected, "rejected"));
+}
+
+function analysisSummaryItem(label, value) {
+  const item = document.createElement("div");
+  const span = document.createElement("span");
+  const strong = document.createElement("strong");
+  span.textContent = label;
+  strong.textContent = value;
+  item.appendChild(span);
+  item.appendChild(strong);
+  return item;
+}
+
+function renderAnalysisRuleGroup(title, records, type) {
+  const group = document.createElement("div");
+  group.className = `analysis-rule-group ${type}`;
+  const heading = document.createElement("strong");
+  heading.textContent = `${title}（${records.length}）`;
+  group.appendChild(heading);
+  if (records.length === 0) {
+    const empty = document.createElement("span");
+    empty.className = "analysis-empty";
+    empty.textContent = "无";
+    group.appendChild(empty);
+    return group;
+  }
+  const list = document.createElement("div");
+  list.className = "analysis-rule-list";
+  records.forEach((record) => {
+    list.appendChild(renderAnalysisRuleRow(record, type));
+  });
+  group.appendChild(list);
+  return group;
+}
+
+function renderAnalysisRuleRow(record, type) {
+  const row = document.createElement("div");
+  row.className = `analysis-rule-row ${type}`;
+  row.appendChild(renderRecordTriple(record));
+  const meta = document.createElement("span");
+  meta.className = "analysis-rule-meta";
+  const confidence = Number(record.confidence || 0);
+  meta.textContent = `${record.provider || "-"} · ${record.mistakeType || "unknown"} · ${(confidence * 100).toFixed(0)}%`;
+  row.appendChild(meta);
+  return row;
+}
+
 function renderRecords(records) {
   const list = document.getElementById("recordList");
   const empty = document.getElementById("recordEmpty");
@@ -814,7 +926,7 @@ function applyInitialState() {
 
 function syncActionState() {
   const pending = !bridgeReady && !(window.pywebview && window.pywebview.api);
-  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, #addManualCorrection, #openKeylogFile, #openLearningLog, #refreshRecords, [data-browse], [data-record-kind], [data-record-tab]").forEach((button) => {
+  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, #runAnalysisNow, #addManualCorrection, #openKeylogFile, #openLearningLog, #refreshRecords, [data-browse], [data-record-kind], [data-record-tab]").forEach((button) => {
     button.disabled = pending;
     button.classList.toggle("is-pending", pending);
   });

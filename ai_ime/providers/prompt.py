@@ -32,6 +32,7 @@ Keyboard log entries may include raw key events and semantic commit entries:
 - role "candidate" means the user selected a candidate before later editing; role "correction" means the final corrected selection.
 You may infer a rule from key logs only when semantic commit entries show a candidate selection followed by deletion/backspace and a corrected selection.
 Do not derive rules from raw key events alone.
+Return only rules whose wrong_pinyin, correct_pinyin, and committed_text exactly match a correction event or a semantic candidate/correction pair.
 If the evidence is insufficient, return {"rules": []}.
 Do not copy raw keyboard-log fragments into explanations.
 """

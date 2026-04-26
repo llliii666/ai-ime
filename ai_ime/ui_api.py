@@ -10,8 +10,19 @@ from typing import Any
 from ai_ime.config import default_data_dir
 from ai_ime.config import default_db_path, load_env_file
 from ai_ime.correction.normalize import normalize_pinyin
-from ai_ime.analysis_scheduler import SCHEDULER_STATE_FILE
-from ai_ime.db import connect, delete_event, delete_rule, init_db, list_events, list_rules, update_event, update_rule
+from ai_ime.correction.rules import event_supports_rule
+from ai_ime.analysis_scheduler import AdaptiveAnalysisScheduler, SCHEDULER_STATE_FILE
+from ai_ime.db import (
+    connect,
+    delete_event,
+    delete_rule,
+    init_db,
+    list_events,
+    list_rules,
+    set_rule_enabled,
+    update_event,
+    update_rule,
+)
 from ai_ime.learning import AutoLearningEngine
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
@@ -62,6 +73,7 @@ class SettingsApi:
         try:
             with closing(connect(self.db_path)) as conn:
                 init_db(conn)
+                _disable_unsupported_local_rules(conn)
                 events = _sort_events(list_events(conn), sort)
                 rules = _sort_rules(list_rules(conn, enabled_only=True), sort)
         except Exception as exc:
@@ -229,6 +241,7 @@ class SettingsApi:
         try:
             with connect(self.db_path) as conn:
                 init_db(conn)
+                _disable_unsupported_local_rules(conn)
                 rules = list_rules(conn, enabled_only=True)
             result = deploy_rime_files(
                 rules,
@@ -267,6 +280,33 @@ class SettingsApi:
             "ok": True,
             "message": f"模型接口连接正常，获取到 {len(models)} 个模型。" if models else "模型接口连接正常，但没有返回模型列表。",
             "models": models,
+        }
+
+    def run_analysis_now(self, payload: dict[str, Any]) -> dict[str, Any]:
+        raw_settings = payload.get("settings", {})
+        if not isinstance(raw_settings, dict):
+            return _error("设置数据格式不正确。")
+        settings = _settings_from_payload(raw_settings)
+        api_key = str(payload.get("apiKey", "") or "").strip()
+        if api_key:
+            os.environ[settings.openai_api_key_env] = api_key
+        try:
+            result = AdaptiveAnalysisScheduler(settings, db_path=self.db_path).run_once(force=True)
+        except Exception as exc:
+            return _error(f"立即提交失败：{exc}")
+        return {
+            "ok": True,
+            "attempted": result.attempted,
+            "message": _analysis_result_message(result.message),
+            "upsertedRules": result.upserted_rules,
+            "keylogCount": result.keylog_count,
+            "sentKeylogCount": result.sent_keylog_count,
+            "newEventCount": result.new_event_count,
+            "sentEventCount": result.sent_event_count,
+            "returnedRules": result.returned_rules,
+            "rejectedRules": result.rejected_rules,
+            "rules": [_rule_payload(rule) for rule in result.rules],
+            "rejectedRuleItems": [_rule_payload(rule) for rule in result.rejected_rule_items],
         }
 
     def open_path(self, value: str) -> dict[str, Any]:
@@ -312,6 +352,7 @@ class SettingsApi:
         try:
             conn = connect(self.db_path)
             init_db(conn)
+            _disable_unsupported_local_rules(conn)
             events_count = len(list_events(conn))
             enabled_rules_count = len(list_rules(conn, enabled_only=True))
             rules_count = len(list_rules(conn))
@@ -478,6 +519,45 @@ def _rule_payload(rule: LearnedRule) -> dict[str, Any]:
         "explanation": rule.explanation,
         "lastSeenAt": rule.last_seen_at,
     }
+
+
+def _disable_unsupported_local_rules(conn: Any) -> int:
+    supported = {
+        (
+            normalize_pinyin(event.wrong_pinyin),
+            normalize_pinyin(event.correct_pinyin),
+            event.committed_text.strip(),
+        )
+        for event in list_events(conn)
+        if event_supports_rule(event)
+    }
+    disabled = 0
+    for rule in list_rules(conn, enabled_only=True):
+        if rule.provider != "rule" or rule.id is None:
+            continue
+        triple = (
+            normalize_pinyin(rule.wrong_pinyin),
+            normalize_pinyin(rule.correct_pinyin),
+            rule.committed_text.strip(),
+        )
+        if triple in supported:
+            continue
+        if set_rule_enabled(conn, rule.id, False):
+            disabled += 1
+    return disabled
+
+
+def _analysis_result_message(message: str) -> str:
+    messages = {
+        "AI analysis disabled": "AI 分析已关闭，本次立即提交仍可手动触发。",
+        "No new typing activity": "没有发现可提交的新键入日志或纠错事件。",
+        "No correction events to analyze": "没有可分析的纠错事件。",
+        "AI analysis completed": "AI 分析已完成。",
+    }
+    if message.startswith("AI analysis completed; rejected "):
+        rejected = message.removeprefix("AI analysis completed; rejected ").split(" ", 1)[0]
+        return f"AI 分析已完成，{rejected} 条规则未通过证据校验。"
+    return messages.get(message, message)
 
 
 def _storage_paths(settings: AppSettings, env_path: Path, db_path: Path) -> list[dict[str, str]]:

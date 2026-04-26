@@ -102,8 +102,65 @@ class AnalysisSchedulerTests(unittest.TestCase):
             self.assertTrue(result.attempted)
             self.assertEqual(provider.keylog_count, 1)
             self.assertEqual(result.upserted_rules, 1)
+            self.assertEqual(result.returned_rules, 1)
+            self.assertEqual(result.rejected_rules, 0)
+            self.assertEqual(result.sent_event_count, 1)
+            self.assertEqual(result.sent_keylog_count, 1)
             self.assertEqual(state.last_analyzed_event_id, 1)
             self.assertGreater(state.last_keylog_offset, 0)
+
+    def test_run_once_rejects_provider_rules_without_supported_evidence(self) -> None:
+        class MixedProvider:
+            def analyze_events(self, events, keylog_entries=None):
+                return [
+                    LearnedRule(
+                        wrong_pinyin="xainzai",
+                        correct_pinyin="xianzai",
+                        committed_text="现在",
+                        confidence=0.8,
+                        weight=141000,
+                        count=1,
+                        mistake_type="adjacent_transposition",
+                        provider="fake",
+                    ),
+                    LearnedRule(
+                        wrong_pinyin="hen",
+                        correct_pinyin="n",
+                        committed_text="很",
+                        confidence=0.9,
+                        weight=150000,
+                        count=1,
+                        mistake_type="unknown",
+                        provider="fake",
+                    ),
+                ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                insert_event(conn, CorrectionEvent("xainzai", "xianzai", "现在", source="auto-ui"))
+                insert_event(conn, CorrectionEvent("hen", "n", "很", source="auto-ui"))
+            settings = AppSettings(
+                auto_analyze_with_ai=True,
+                provider="openai-compatible",
+                keylog_file=str(keylog_path),
+            )
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with patch("ai_ime.analysis_scheduler._build_provider", return_value=MixedProvider()), patch(
+                "ai_ime.analysis_scheduler._append_learning_log"
+            ):
+                result = scheduler.run_once()
+
+            self.assertTrue(result.attempted)
+            self.assertEqual(result.returned_rules, 2)
+            self.assertEqual(result.upserted_rules, 1)
+            self.assertEqual(result.rejected_rules, 1)
+            self.assertEqual(result.rules[0].wrong_pinyin, "xainzai")
+            self.assertEqual(result.rejected_rule_items[0].wrong_pinyin, "hen")
 
     def test_run_once_keeps_keylog_offset_when_provider_fails(self) -> None:
         class FailingProvider:

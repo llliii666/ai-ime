@@ -108,6 +108,27 @@ class LearningTests(unittest.TestCase):
                 ("correction", "xianzai", "现在"),
             ])
 
+    def test_engine_skips_low_confidence_auto_fragment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            settings = AppSettings(auto_deploy_rime=False, auto_analyze_with_ai=False)
+            engine = AutoLearningEngine(
+                settings,
+                db_path=db_path,
+                text_reader=FakeTextReader(["我", "我很"]),
+                capture_delay=0,
+                async_finalize=False,
+            )
+
+            with patch("ai_ime.learning._append_learning_log"):
+                for stroke in parse_sequence("hen{backspace*3}n{space}"):
+                    engine.handle_stroke(stroke)
+
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                self.assertEqual(list_events(conn), [])
+                self.assertEqual(list_rules(conn), [])
+
     def test_engine_skips_when_committed_text_is_not_readable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "ai-ime.db"

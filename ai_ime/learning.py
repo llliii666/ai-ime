@@ -9,7 +9,7 @@ from typing import Callable
 
 from ai_ime.config import default_data_dir, default_db_path
 from ai_ime.correction.detector import CONFIRM_KEYS, CorrectionDetector, KeyStroke, PendingCorrection
-from ai_ime.correction.rules import aggregate_rules
+from ai_ime.correction.rules import aggregate_rules, event_supports_rule
 from ai_ime.db import connect, init_db, insert_event, list_events, list_rules, upsert_rules
 from ai_ime.listener import KeyLogEntry, KeyLogWriter, keyboard_name_to_stroke
 from ai_ime.models import CorrectionEvent
@@ -120,6 +120,11 @@ class AutoLearningEngine:
             or pending.wrong_committed_text,
         )
         if event is None:
+            return None
+        if not event_supports_rule(event):
+            _append_learning_log(
+                f"skip pending={pending.wrong_pinyin}->{pending.correct_pinyin}: low-confidence automatic event"
+            )
             return None
         if self.settings.record_full_keylog:
             _append_semantic_keylog(

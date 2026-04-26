@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from ai_ime.config import default_data_dir, default_db_path
+from ai_ime.correction.normalize import normalize_pinyin
+from ai_ime.correction.rules import event_supports_rule
 from ai_ime.db import connect, init_db, list_events, upsert_rules
 from ai_ime.learning import _append_learning_log, _build_provider
 from ai_ime.listener import KeyLogEntry
-from ai_ime.models import CorrectionEvent
+from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers import ProviderError
 from ai_ime.settings import AppSettings, resolved_keylog_path
 
@@ -39,6 +41,12 @@ class AnalysisRunResult:
     new_event_count: int
     next_interval_seconds: int
     message: str
+    returned_rules: int = 0
+    rejected_rules: int = 0
+    sent_keylog_count: int = 0
+    sent_event_count: int = 0
+    rules: tuple[LearnedRule, ...] = ()
+    rejected_rule_items: tuple[LearnedRule, ...] = ()
 
 
 class AdaptiveAnalysisScheduler:
@@ -67,7 +75,7 @@ class AdaptiveAnalysisScheduler:
             self._thread.join(timeout=2.0)
         self._thread = None
 
-    def run_once(self) -> AnalysisRunResult:
+    def run_once(self, force: bool = False) -> AnalysisRunResult:
         state = load_scheduler_state(self.state_path)
         keylog_entries, next_offset = read_keylog_entries_since(resolved_keylog_path(self.settings), state.last_keylog_offset)
         with closing(connect(self.db_path)) as conn:
@@ -84,11 +92,11 @@ class AdaptiveAnalysisScheduler:
             last_run_at=time.time(),
         )
 
-        if not self.settings.auto_analyze_with_ai:
+        if not self.settings.auto_analyze_with_ai and not force:
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, len(keylog_entries), len(new_events), next_interval, "AI analysis disabled")
 
-        if not new_events and not keylog_entries:
+        if not new_events and not keylog_entries and (not force or not events):
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, 0, 0, next_interval, "No new typing activity")
 
@@ -108,9 +116,11 @@ class AdaptiveAnalysisScheduler:
             save_scheduler_state(_failure_state(state, next_interval), self.state_path)
             return AnalysisRunResult(True, 0, len(keylog_entries), len(new_events), next_interval, str(exc))
 
+        accepted_rules, rejected_rule_items = partition_rules_by_evidence(rules, events, keylog_payload)
+        rejected = len(rejected_rule_items)
         with closing(connect(self.db_path)) as conn:
             init_db(conn)
-            upserted = upsert_rules(conn, rules)
+            upserted = upsert_rules(conn, accepted_rules)
         max_event_id = max((event.id or 0 for event in events), default=state.last_analyzed_event_id)
         save_scheduler_state(
             AnalysisSchedulerState(
@@ -124,9 +134,25 @@ class AdaptiveAnalysisScheduler:
         _append_learning_log(
             "scheduled AI analysis "
             f"events={len(new_events)} keylogs={len(keylog_payload)}/{len(keylog_entries)} "
-            f"rules={upserted} next={next_interval}s"
+            f"rules={upserted} rejected={rejected} next={next_interval}s"
         )
-        return AnalysisRunResult(True, upserted, len(keylog_entries), len(new_events), next_interval, "AI analysis completed")
+        message = "AI analysis completed"
+        if rejected:
+            message += f"; rejected {rejected} unsupported rule(s)"
+        return AnalysisRunResult(
+            True,
+            upserted,
+            len(keylog_entries),
+            len(new_events),
+            next_interval,
+            message,
+            returned_rules=len(rules),
+            rejected_rules=rejected,
+            sent_keylog_count=len(keylog_payload),
+            sent_event_count=len(events),
+            rules=tuple(accepted_rules),
+            rejected_rule_items=tuple(rejected_rule_items),
+        )
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -139,6 +165,71 @@ class AdaptiveAnalysisScheduler:
 
 def should_send_keylog_entries(settings: AppSettings) -> bool:
     return settings.provider == "ollama" or settings.send_full_keylog
+
+
+def filter_rules_by_evidence(
+    rules: list[LearnedRule],
+    events: list[CorrectionEvent],
+    keylog_entries: list[KeyLogEntry],
+) -> list[LearnedRule]:
+    accepted, _ = partition_rules_by_evidence(rules, events, keylog_entries)
+    return accepted
+
+
+def partition_rules_by_evidence(
+    rules: list[LearnedRule],
+    events: list[CorrectionEvent],
+    keylog_entries: list[KeyLogEntry],
+) -> tuple[list[LearnedRule], list[LearnedRule]]:
+    supported = _supported_event_triples(events) | _supported_keylog_triples(keylog_entries)
+    accepted: list[LearnedRule] = []
+    rejected: list[LearnedRule] = []
+    for rule in rules:
+        triple = (
+            normalize_pinyin(rule.wrong_pinyin),
+            normalize_pinyin(rule.correct_pinyin),
+            rule.committed_text.strip(),
+        )
+        if triple in supported:
+            accepted.append(rule)
+        else:
+            rejected.append(rule)
+    return accepted, rejected
+
+
+def _supported_event_triples(events: list[CorrectionEvent]) -> set[tuple[str, str, str]]:
+    triples: set[tuple[str, str, str]] = set()
+    for event in events:
+        if not event_supports_rule(event):
+            continue
+        triples.add(
+            (
+                normalize_pinyin(event.wrong_pinyin),
+                normalize_pinyin(event.correct_pinyin),
+                event.committed_text.strip(),
+            )
+        )
+    return triples
+
+
+def _supported_keylog_triples(entries: list[KeyLogEntry]) -> set[tuple[str, str, str]]:
+    triples: set[tuple[str, str, str]] = set()
+    candidate: KeyLogEntry | None = None
+    for entry in entries:
+        if entry.event_type != "commit":
+            continue
+        if entry.role == "candidate":
+            candidate = entry
+            continue
+        if entry.role != "correction" or candidate is None:
+            continue
+        wrong = normalize_pinyin(candidate.pinyin or candidate.name)
+        correct = normalize_pinyin(entry.pinyin or entry.name)
+        text = (entry.committed_text or "").strip()
+        if wrong and correct and text and wrong != correct:
+            triples.add((wrong, correct, text))
+        candidate = None
+    return triples
 
 
 def _failure_state(previous: AnalysisSchedulerState, next_interval: int) -> AnalysisSchedulerState:

@@ -600,6 +600,115 @@ select:focus {
   color: var(--amber);
 }
 
+.analysis-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #eef2f7;
+}
+
+.analysis-actions > div {
+  min-width: 0;
+}
+
+.analysis-actions strong,
+.analysis-actions small {
+  display: inline;
+}
+
+.analysis-actions small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analysis-result {
+  display: none;
+  margin-top: 14px;
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.analysis-result.active {
+  display: block;
+  animation: pageIn 160ms ease forwards;
+}
+
+.analysis-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.analysis-summary div {
+  min-width: 0;
+  border: 1px solid #e4eaf3;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+}
+
+.analysis-summary span,
+.analysis-summary strong {
+  display: block;
+}
+
+.analysis-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analysis-summary strong {
+  margin-top: 4px;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.analysis-rule-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.analysis-rule-group > strong {
+  color: #344054;
+  font-size: 13px;
+}
+
+.analysis-rule-list {
+  display: grid;
+  gap: 6px;
+}
+
+.analysis-rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e4eaf3;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.analysis-rule-row.rejected {
+  border-color: #f1c2c2;
+  background: #fffafa;
+}
+
+.analysis-rule-meta,
+.analysis-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .model-picker {
   margin-top: 10px;
 }
@@ -976,6 +1085,8 @@ select:focus {
   .flow-grid,
   .input-with-state,
   .config-summary,
+  .analysis-actions,
+  .analysis-summary,
   .record-edit-form {
     grid-template-columns: 1fr;
   }
@@ -989,6 +1100,7 @@ select:focus {
   }
 
   .record-row,
+  .analysis-rule-row,
   .file-row {
     grid-template-columns: 1fr;
   }

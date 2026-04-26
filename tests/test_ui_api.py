@@ -138,20 +138,20 @@ class SettingsApiTests(unittest.TestCase):
 
                 with closing(connect(db_path)) as conn:
                     init_db(conn)
-                    insert_event(conn, CorrectionEvent("zuihou", "zuihou", "最后", source="manual"))
-                    insert_event(conn, CorrectionEvent("anli", "anli", "案例", source="manual"))
+                    insert_event(conn, CorrectionEvent("zuihuo", "zuihou", "最后", source="manual"))
+                    insert_event(conn, CorrectionEvent("anil", "anli", "案例", source="manual"))
                     upsert_rules(
                         conn,
                         [
-                            LearnedRule("zuihou", "zuihou", "最后", 0.9, 150000, 2, "manual", enabled=False),
-                            LearnedRule("anli", "anli", "案例", 0.95, 151000, 3, "manual", enabled=True),
+                            LearnedRule("zuihuo", "zuihou", "最后", 0.9, 150000, 2, "manual", enabled=False),
+                            LearnedRule("anil", "anli", "案例", 0.95, 151000, 3, "manual", enabled=True),
                         ],
                     )
 
                 response = api.list_correction_records("pinyin")
 
                 self.assertTrue(response["ok"])
-                self.assertEqual([event["wrongPinyin"] for event in response["events"]], ["anli", "zuihou"])
+                self.assertEqual([event["wrongPinyin"] for event in response["events"]], ["anil", "zuihuo"])
                 self.assertEqual(len(response["rules"]), 1)
                 self.assertEqual(response["rules"][0]["committedText"], "案例")
                 self.assertIn("storagePaths", api.load_state()["meta"])
@@ -203,6 +203,40 @@ class SettingsApiTests(unittest.TestCase):
             else:
                 os.environ["LOCALAPPDATA"] = old_local_app_data
 
+    def test_load_state_disables_unsupported_local_auto_rules(self) -> None:
+        old_local_app_data = os.environ.get("LOCALAPPDATA")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["LOCALAPPDATA"] = str(Path(tmp) / "LocalAppData")
+                db_path = Path(tmp) / "ai-ime.db"
+                api = SettingsApi(env_path=Path(tmp) / ".env", db_path=db_path)
+                with closing(connect(db_path)) as conn:
+                    init_db(conn)
+                    insert_event(conn, CorrectionEvent("hen", "n", "很", source="auto-ui"))
+                    insert_event(conn, CorrectionEvent("xainzai", "xianzai", "现在", source="auto-ui"))
+                    upsert_rules(
+                        conn,
+                        [
+                            LearnedRule("hen", "n", "很", 0.8, 140000, 1, "edit_distance_2", provider="rule"),
+                            LearnedRule("xainzai", "xianzai", "现在", 0.9, 150000, 1, "adjacent_transposition", provider="rule"),
+                        ],
+                    )
+
+                state = api.load_state()
+                with closing(connect(db_path)) as conn:
+                    init_db(conn)
+                    enabled_rules = list_rules(conn, enabled_only=True)
+
+                self.assertTrue(state["ok"])
+                self.assertEqual([(rule.wrong_pinyin, rule.correct_pinyin) for rule in enabled_rules], [("xainzai", "xianzai")])
+                self.assertEqual(state["meta"]["enabledRulesCount"], 1)
+                self.assertEqual(state["meta"]["rulesCount"], 2)
+        finally:
+            if old_local_app_data is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = old_local_app_data
+
     def test_load_state_exposes_provider_presets(self) -> None:
         old_local_app_data = os.environ.get("LOCALAPPDATA")
         try:
@@ -243,6 +277,73 @@ class SettingsApiTests(unittest.TestCase):
 
         self.assertTrue(response["ok"])
         self.assertEqual(response["models"], ["alpha", "beta"])
+
+    def test_run_analysis_now_forces_provider_and_returns_visible_rules(self) -> None:
+        class MixedProvider:
+            def analyze_events(self, events, keylog_entries=None):
+                return [
+                    LearnedRule(
+                        wrong_pinyin="xainzai",
+                        correct_pinyin="xianzai",
+                        committed_text="现在",
+                        confidence=0.8,
+                        weight=141000,
+                        count=1,
+                        mistake_type="adjacent_transposition",
+                        provider="fake",
+                    ),
+                    LearnedRule(
+                        wrong_pinyin="hen",
+                        correct_pinyin="n",
+                        committed_text="很",
+                        confidence=0.9,
+                        weight=150000,
+                        count=1,
+                        mistake_type="unknown",
+                        provider="fake",
+                    ),
+                ]
+
+        old_local_app_data = os.environ.get("LOCALAPPDATA")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["LOCALAPPDATA"] = str(Path(tmp) / "LocalAppData")
+                db_path = Path(tmp) / "ai-ime.db"
+                keylog_path = Path(tmp) / "keylog.jsonl"
+                api = SettingsApi(env_path=Path(tmp) / ".env", db_path=db_path)
+                with closing(connect(db_path)) as conn:
+                    init_db(conn)
+                    insert_event(conn, CorrectionEvent("xainzai", "xianzai", "现在", source="auto-ui"))
+                    insert_event(conn, CorrectionEvent("hen", "n", "很", source="auto-ui"))
+
+                with patch("ai_ime.analysis_scheduler._build_provider", return_value=MixedProvider()), patch(
+                    "ai_ime.analysis_scheduler._append_learning_log"
+                ):
+                    response = api.run_analysis_now(
+                        {
+                            "settings": {
+                                "auto_analyze_with_ai": False,
+                                "provider": "openai-compatible",
+                                "openai_base_url": "http://relay.test/v1",
+                                "openai_model": "gpt-5.4-mini",
+                                "keylog_file": str(keylog_path),
+                            }
+                        }
+                    )
+
+                self.assertTrue(response["ok"])
+                self.assertTrue(response["attempted"])
+                self.assertEqual(response["sentEventCount"], 2)
+                self.assertEqual(response["returnedRules"], 2)
+                self.assertEqual(response["upsertedRules"], 1)
+                self.assertEqual(response["rejectedRules"], 1)
+                self.assertEqual(response["rules"][0]["wrongPinyin"], "xainzai")
+                self.assertEqual(response["rejectedRuleItems"][0]["wrongPinyin"], "hen")
+        finally:
+            if old_local_app_data is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = old_local_app_data
 
 
 if __name__ == "__main__":
