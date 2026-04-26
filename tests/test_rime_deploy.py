@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from ai_ime.models import LearnedRule
-from ai_ime.rime.deploy import deploy_rime_files, rollback_backup
+from ai_ime.rime.deploy import deploy_rime_files, merge_schema_patch, rollback_backup
 
 
 def sample_rules() -> list[LearnedRule]:
@@ -35,7 +35,7 @@ class RimeDeployTests(unittest.TestCase):
             self.assertFalse(result.dictionary_path.exists())
             self.assertFalse(result.patch_path.exists())
 
-    def test_existing_patch_is_not_overwritten_without_force(self) -> None:
+    def test_existing_patch_is_merged_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             rime_dir = Path(tmp)
             existing_patch = rime_dir / "luna_pinyin.custom.yaml"
@@ -43,9 +43,27 @@ class RimeDeployTests(unittest.TestCase):
 
             result = deploy_rime_files(sample_rules(), rime_dir)
 
-            self.assertFalse(result.patch_applied)
-            self.assertEqual(existing_patch.read_text(encoding="utf-8"), "patch:\n  menu/page_size: 9\n")
-            self.assertTrue(result.patch_path.name.endswith(".pending"))
+            self.assertTrue(result.patch_applied)
+            content = existing_patch.read_text(encoding="utf-8")
+            self.assertIn("translator/dictionary: ai_typo", content)
+            self.assertIn("menu/page_size: 9", content)
+            self.assertEqual(result.patch_path, existing_patch)
+
+    def test_merge_schema_patch_appends_top_level_patch(self) -> None:
+        content = "__include: octagram\n\noctagram:\n  __patch:\n    translator/max_homophones: 5\n"
+
+        merged = merge_schema_patch(content)
+
+        self.assertIn("octagram:\n  __patch:\n    translator/max_homophones: 5", merged)
+        self.assertIn("\npatch:\n  translator/dictionary: ai_typo\n", merged)
+
+    def test_merge_schema_patch_replaces_existing_dictionary(self) -> None:
+        content = "patch:\n  translator/dictionary: old_dict\n  menu/page_size: 9\n"
+
+        merged = merge_schema_patch(content, dictionary_id="ai_typo")
+
+        self.assertIn("translator/dictionary: ai_typo", merged)
+        self.assertNotIn("old_dict", merged)
 
 
 if __name__ == "__main__":

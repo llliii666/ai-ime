@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 
@@ -23,6 +24,16 @@ def find_existing_user_dir() -> Path | None:
     return None
 
 
+def detect_active_schema(rime_dir: Path) -> str | None:
+    custom_path = rime_dir / "default.custom.yaml"
+    default_path = rime_dir / "default.yaml"
+    for path in (custom_path, default_path):
+        schema = _read_first_schema(path)
+        if schema:
+            return schema
+    return None
+
+
 def _dedupe(paths: list[Path]) -> list[Path]:
     seen: set[str] = set()
     unique: list[Path] = []
@@ -33,3 +44,16 @@ def _dedupe(paths: list[Path]) -> list[Path]:
         seen.add(key)
         unique.append(path)
     return unique
+
+
+def _read_first_schema(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    content = path.read_text(encoding="utf-8-sig")
+    inline_match = re.search(r"\{\s*schema\s*:\s*([A-Za-z0-9_.-]+)\s*\}", content)
+    if inline_match:
+        return inline_match.group(1)
+    block_match = re.search(r"^\s*-?\s*schema\s*:\s*([A-Za-z0-9_.-]+)\s*$", content, re.MULTILINE)
+    if block_match:
+        return block_match.group(1)
+    return None
