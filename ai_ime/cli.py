@@ -8,6 +8,7 @@ from .correction.normalize import normalize_pinyin
 from .correction.rules import aggregate_rules
 from .db import connect, init_db, insert_event, list_events, list_rules, upsert_rules
 from .models import CorrectionEvent
+from .providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from .rime.deploy import deploy_rime_files, rollback_backup
 from .rime.generator import export_rime_files
 from .rime.paths import find_existing_user_dir
@@ -41,6 +42,24 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser = subparsers.add_parser("analyze", help="Aggregate events into learned rules.")
     analyze_parser.add_argument("--min-count", type=int, default=1, help="Minimum observations per rule.")
     analyze_parser.set_defaults(handler=handle_analyze)
+
+    analyze_ai_parser = subparsers.add_parser("analyze-ai", help="Analyze events with an AI provider.")
+    analyze_ai_parser.add_argument(
+        "--provider",
+        choices=["mock", "ollama", "openai-compatible"],
+        default="mock",
+        help="AI provider to use.",
+    )
+    analyze_ai_parser.add_argument("--model", default="", help="Model name for ollama/openai-compatible.")
+    analyze_ai_parser.add_argument("--base-url", default="", help="Provider base URL.")
+    analyze_ai_parser.add_argument("--api-key-env", default="OPENAI_API_KEY", help="Env var containing API key.")
+    analyze_ai_parser.add_argument("--timeout", type=float, default=60.0, help="Provider timeout in seconds.")
+    analyze_ai_parser.add_argument(
+        "--no-json-mode",
+        action="store_true",
+        help="Disable OpenAI-compatible JSON mode for providers that do not support it.",
+    )
+    analyze_ai_parser.set_defaults(handler=handle_analyze_ai)
 
     list_rules_parser = subparsers.add_parser("list-rules", help="List learned rules.")
     list_rules_parser.add_argument("--enabled-only", action="store_true", help="Only list enabled rules.")
@@ -105,6 +124,21 @@ def handle_analyze(args: argparse.Namespace) -> int:
         rules = aggregate_rules(events, min_count=args.min_count)
         upserted = upsert_rules(conn, rules)
     print(f"Analyzed {len(events)} event(s); upserted {upserted} rule(s).")
+    return 0
+
+
+def handle_analyze_ai(args: argparse.Namespace) -> int:
+    with connect(args.db) as conn:
+        init_db(conn)
+        events = list_events(conn)
+        provider = _build_provider(args)
+        try:
+            rules = provider.analyze_events(events)
+        except ProviderError as exc:
+            print(f"AI analysis failed: {exc}")
+            return 1
+        upserted = upsert_rules(conn, rules)
+    print(f"AI analyzed {len(events)} event(s); upserted {upserted} rule(s) from {args.provider}.")
     return 0
 
 
@@ -193,3 +227,23 @@ def _resolve_rime_dir(value: Path | None) -> Path | None:
     if value is not None:
         return value
     return find_existing_user_dir()
+
+
+def _build_provider(args: argparse.Namespace):
+    if args.provider == "mock":
+        return MockProvider()
+    if args.provider == "ollama":
+        return OllamaProvider(
+            model=args.model,
+            base_url=args.base_url or "http://localhost:11434",
+            timeout=args.timeout,
+        )
+    if args.provider == "openai-compatible":
+        return OpenAICompatibleProvider(
+            model=args.model,
+            base_url=args.base_url or "https://api.openai.com/v1",
+            api_key_env=args.api_key_env,
+            timeout=args.timeout,
+            use_json_mode=not args.no_json_mode,
+        )
+    raise ValueError(f"Unsupported provider: {args.provider}")
