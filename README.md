@@ -171,3 +171,7 @@ uv run python -m ai_ime list-rules
 ```
 
 If automatic deploy is enabled, AI IME writes the updated `ai_typo` dictionary and attempts to run 小狼毫 redeploy. Some applications do not expose focused text through UI Automation; Notepad is the recommended first manual test target.
+
+The settings window also has a manual correction page. Enter the wrong pinyin, the corrected pinyin, and the Chinese text to write a local event and rule immediately.
+
+AI analysis is batched in the background instead of running after every correction. The scheduler starts around 30 minutes, shortens to 10 minutes for heavy typing, and backs off through 1 hour, 2 hours, 5 hours, 8 hours, and 12 hours when there is little or no activity. Cloud and relay providers receive keyboard logs only when `send_full_keylog` is enabled; local Ollama may receive keyboard-log context by default.

@@ -1,9 +1,11 @@
 import os
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
+from ai_ime.db import connect, init_db, list_events, list_rules
 from ai_ime.ui_api import SettingsApi, _settings_from_payload, _settings_payload
 
 
@@ -70,6 +72,44 @@ class SettingsApiTests(unittest.TestCase):
                 os.environ.pop("AI_IME_OPENAI_API_KEY", None)
             else:
                 os.environ["AI_IME_OPENAI_API_KEY"] = old_key
+
+    def test_add_manual_correction_records_event_and_rule(self) -> None:
+        old_local_app_data = os.environ.get("LOCALAPPDATA")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["LOCALAPPDATA"] = str(Path(tmp) / "LocalAppData")
+                db_path = Path(tmp) / "ai-ime.db"
+                api = SettingsApi(env_path=Path(tmp) / ".env", db_path=db_path)
+
+                with patch("ai_ime.learning._append_learning_log"):
+                    response = api.add_manual_correction(
+                        {
+                            "settings": {
+                                "auto_deploy_rime": False,
+                                "auto_analyze_with_ai": False,
+                                "keylog_file": str(Path(tmp) / "keylog.jsonl"),
+                            },
+                            "correction": {
+                                "wrongPinyin": "xainzai",
+                                "correctPinyin": "xianzai",
+                                "committedText": "现在",
+                            },
+                        }
+                    )
+
+                with closing(connect(db_path)) as conn:
+                    init_db(conn)
+                    events = list_events(conn)
+                    rules = list_rules(conn)
+
+                self.assertTrue(response["ok"])
+                self.assertEqual(events[0].source, "manual-ui")
+                self.assertEqual(rules[0].committed_text, "现在")
+        finally:
+            if old_local_app_data is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = old_local_app_data
 
 
 if __name__ == "__main__":

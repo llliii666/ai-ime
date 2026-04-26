@@ -6,8 +6,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from ai_ime.config import default_data_dir
 from ai_ime.config import default_db_path, load_env_file
+from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.db import connect, init_db, list_events, list_rules
+from ai_ime.learning import AutoLearningEngine
+from ai_ime.models import CorrectionEvent
 from ai_ime.providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from ai_ime.rime.deploy import deploy_rime_files
 from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
@@ -34,6 +38,7 @@ class SettingsApi:
                 "settingsPath": str(default_settings_path()),
                 "envPath": str(self.env_path.resolve()),
                 "dbPath": str(self.db_path),
+                "learningLogPath": str(default_data_dir() / "learning.log"),
                 "apiKeySaved": bool(env_api_key(settings)),
                 "apiKeyMask": _mask_secret(env_api_key(settings)),
                 **self._database_stats(),
@@ -52,6 +57,39 @@ class SettingsApi:
         load_env_file(self.env_path, override=True)
         set_start_on_login(settings.start_on_login)
         return {"ok": True, "message": "设置已保存。", "settings": _settings_payload(settings)}
+
+    def add_manual_correction(self, payload: dict[str, Any]) -> dict[str, Any]:
+        raw_settings = payload.get("settings", {})
+        raw_correction = payload.get("correction", {})
+        if not isinstance(raw_settings, dict) or not isinstance(raw_correction, dict):
+            return _error("手动纠错数据格式不正确。")
+
+        wrong = normalize_pinyin(str(raw_correction.get("wrongPinyin", "")))
+        correct = normalize_pinyin(str(raw_correction.get("correctPinyin", "")))
+        text = str(raw_correction.get("committedText", "")).strip()
+        if not wrong or not correct or not text:
+            return _error("请填写错误拼音、正确拼音和对应中文。")
+        if wrong == correct:
+            return _error("错误拼音和正确拼音不能相同。")
+
+        settings = _settings_from_payload(raw_settings)
+        event = CorrectionEvent(
+            wrong_pinyin=wrong,
+            correct_pinyin=correct,
+            committed_text=text,
+            commit_key="manual",
+            source="manual-ui",
+        )
+        try:
+            result = AutoLearningEngine(settings, db_path=self.db_path, capture_delay=0, async_finalize=False).learn_event(event)
+        except Exception as exc:
+            return _error(f"手动纠错记录失败：{exc}")
+        return {
+            "ok": True,
+            "message": f"已记录：{wrong} -> {correct} -> {text}",
+            "upsertedRules": result.upserted_rules,
+            "deployed": result.deployed,
+        }
 
     def detect_rime(self) -> dict[str, Any]:
         rime_dir = find_existing_user_dir()
@@ -149,6 +187,22 @@ class SettingsApi:
             return _error(f"打开路径失败：{exc}")
         return {"ok": True}
 
+    def open_record_file(self, kind: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        if kind == "learning":
+            path = default_data_dir() / "learning.log"
+        elif kind == "keylog":
+            raw_settings = (payload or {}).get("settings", {})
+            settings = _settings_from_payload(raw_settings if isinstance(raw_settings, dict) else {})
+            path = Path(settings.keylog_file or str(default_data_dir() / "keylog.jsonl"))
+        else:
+            return _error("未知记录类型。")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch(exist_ok=True)
+        except Exception as exc:
+            return _error(f"创建记录文件失败：{exc}")
+        return self.open_path(str(path))
+
     def _database_stats(self) -> dict[str, int]:
         conn = None
         try:
@@ -206,7 +260,7 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
         rime_schema=_as_string(payload.get("rime_schema"), "luna_pinyin"),
         rime_dictionary=_as_string(payload.get("rime_dictionary"), "ai_typo"),
         rime_base_dictionary=_as_string(payload.get("rime_base_dictionary"), ""),
-        keylog_file=_as_string(payload.get("keylog_file"), ""),
+        keylog_file=_as_string(payload.get("keylog_file"), str(default_data_dir() / "keylog.jsonl")),
     )
 
 

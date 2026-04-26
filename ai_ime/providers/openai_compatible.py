@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+from ai_ime.listener import KeyLogEntry
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers.base import AIProvider, ProviderError
 from ai_ime.providers.http import post_json
@@ -24,7 +25,11 @@ class OpenAICompatibleProvider(AIProvider):
         self.timeout = timeout
         self.use_json_mode = use_json_mode
 
-    def analyze_events(self, events: list[CorrectionEvent]) -> list[LearnedRule]:
+    def analyze_events(
+        self,
+        events: list[CorrectionEvent],
+        keylog_entries: list[KeyLogEntry] | None = None,
+    ) -> list[LearnedRule]:
         if not self.model:
             raise ProviderError("OpenAI-compatible provider requires a model.")
         headers = {}
@@ -35,7 +40,7 @@ class OpenAICompatibleProvider(AIProvider):
             "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(events)},
+                {"role": "user", "content": build_user_prompt(events, keylog_entries=keylog_entries)},
             ],
             "temperature": 0,
         }

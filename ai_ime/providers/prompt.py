@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from ai_ime.listener import KeyLogEntry
 from ai_ime.models import CorrectionEvent
 
 
@@ -24,10 +25,11 @@ Your output must match this shape:
 }
 Only recommend rules supported by the events. Use confidence from 0.0 to 1.0.
 Use higher weight for more confident and repeated rules.
+Keyboard logs are optional context only. Do not invent a rule from keyboard logs alone.
 """
 
 
-def build_user_prompt(events: list[CorrectionEvent]) -> str:
+def build_user_prompt(events: list[CorrectionEvent], keylog_entries: list[KeyLogEntry] | None = None) -> str:
     payload = {
         "events": [
             {
@@ -38,6 +40,15 @@ def build_user_prompt(events: list[CorrectionEvent]) -> str:
                 "source": event.source,
             }
             for event in events
-        ]
+        ],
+        "keylog_entries": [
+            {
+                "timestamp": entry.timestamp,
+                "event_type": entry.event_type,
+                "name": entry.name,
+                "scan_code": entry.scan_code,
+            }
+            for entry in (keylog_entries or [])
+        ],
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)

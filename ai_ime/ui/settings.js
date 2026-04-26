@@ -55,6 +55,9 @@ function bindUi() {
   document.getElementById("deployRime").addEventListener("click", deployRime);
   document.getElementById("openRimeDir").addEventListener("click", openRimeDir);
   document.getElementById("testProvider").addEventListener("click", testProvider);
+  document.getElementById("addManualCorrection").addEventListener("click", addManualCorrection);
+  document.getElementById("openKeylogFile").addEventListener("click", () => openRecordFile("keylog"));
+  document.getElementById("openLearningLog").addEventListener("click", () => openRecordFile("learning"));
   document.getElementById("provider").addEventListener("change", syncTopbar);
   document.getElementById("listener_enabled").addEventListener("change", syncTopbar);
   syncActionState();
@@ -137,6 +140,30 @@ async function testProvider() {
   setStatus(response.message || (response.ok ? "模型连接正常" : "模型连接失败"), response.ok ? "ok" : "error");
 }
 
+async function addManualCorrection() {
+  if (!apiReady()) {
+    return;
+  }
+  setStatus("正在记录手动纠错");
+  const response = await window.pywebview.api.add_manual_correction({
+    ...collectPayload(),
+    correction: {
+      wrongPinyin: document.getElementById("manualWrongPinyin").value.trim(),
+      correctPinyin: document.getElementById("manualCorrectPinyin").value.trim(),
+      committedText: document.getElementById("manualCommittedText").value.trim(),
+    },
+  });
+  if (!response.ok) {
+    setStatus(response.message || "记录失败", "error");
+    return;
+  }
+  document.getElementById("manualWrongPinyin").value = "";
+  document.getElementById("manualCorrectPinyin").value = "";
+  document.getElementById("manualCommittedText").value = "";
+  setStatus(response.message || "纠错已记录", "ok");
+  await loadState();
+}
+
 async function openRimeDir() {
   if (!apiReady()) {
     return;
@@ -145,6 +172,16 @@ async function openRimeDir() {
   const response = await window.pywebview.api.open_path(value);
   if (!response.ok) {
     setStatus(response.message || "打开目录失败", "error");
+  }
+}
+
+async function openRecordFile(kind) {
+  if (!apiReady()) {
+    return;
+  }
+  const response = await window.pywebview.api.open_record_file(kind, collectPayload());
+  if (!response.ok) {
+    setStatus(response.message || "打开记录失败", "error");
   }
 }
 
@@ -251,7 +288,7 @@ function applyInitialState() {
 
 function syncActionState() {
   const pending = !bridgeReady && !(window.pywebview && window.pywebview.api);
-  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, [data-browse]").forEach((button) => {
+  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, #addManualCorrection, #openKeylogFile, #openLearningLog, [data-browse]").forEach((button) => {
     button.disabled = pending;
     button.classList.toggle("is-pending", pending);
   });

@@ -374,6 +374,10 @@ select:focus {
   gap: 8px;
 }
 
+.path-control.with-open {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;

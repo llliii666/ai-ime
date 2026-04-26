@@ -1,6 +1,8 @@
 import unittest
 
+from ai_ime.listener import KeyLogEntry
 from ai_ime.providers.base import ProviderError
+from ai_ime.providers.prompt import build_user_prompt
 from ai_ime.providers.schema import parse_rules_json
 
 
@@ -34,6 +36,12 @@ class ProviderSchemaTests(unittest.TestCase):
     def test_parse_rules_json_rejects_bad_shape(self) -> None:
         with self.assertRaises(ProviderError):
             parse_rules_json('{"rules": {}}', provider="test")
+
+    def test_prompt_can_include_keylog_context(self) -> None:
+        prompt = build_user_prompt([], keylog_entries=[KeyLogEntry(timestamp=1.0, event_type="down", name="x")])
+
+        self.assertIn('"keylog_entries"', prompt)
+        self.assertIn('"name": "x"', prompt)
 
 
 if __name__ == "__main__":

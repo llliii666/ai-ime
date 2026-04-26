@@ -12,7 +12,7 @@ from ai_ime.correction.detector import CONFIRM_KEYS, CorrectionDetector, KeyStro
 from ai_ime.correction.rules import aggregate_rules
 from ai_ime.db import connect, init_db, insert_event, list_events, list_rules, upsert_rules
 from ai_ime.listener import keyboard_name_to_stroke
-from ai_ime.models import CorrectionEvent, LearnedRule
+from ai_ime.models import CorrectionEvent
 from ai_ime.providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from ai_ime.rime.deploy import deploy_rime_files
 from ai_ime.rime.weasel import run_weasel_deployer
@@ -93,8 +93,6 @@ class AutoLearningEngine:
             events = list_events(conn)
             local_rules = aggregate_rules(events)
             upserted = upsert_rules(conn, local_rules)
-            if self.settings.auto_analyze_with_ai:
-                upserted += self._upsert_ai_rules(conn, events)
 
         deployed = False
         rime_redeployed = False
@@ -123,18 +121,6 @@ class AutoLearningEngine:
             deployed=deployed,
             rime_redeployed=rime_redeployed,
         )
-
-    def _upsert_ai_rules(self, conn, events: list[CorrectionEvent]) -> int:
-        try:
-            rules = _build_provider(self.settings).analyze_events(events)
-        except ProviderError as exc:
-            _append_learning_log(f"AI analysis failed: {exc}")
-            return 0
-        except Exception as exc:
-            _append_learning_log(f"AI analysis failed: {exc}")
-            return 0
-        return upsert_rules(conn, rules)
-
 
 def _build_provider(settings: AppSettings):
     if settings.provider == "mock":

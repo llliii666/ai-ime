@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ai_ime.listener import KeyLogEntry
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers.base import AIProvider, ProviderError
 from ai_ime.providers.http import post_json
@@ -13,14 +14,18 @@ class OllamaProvider(AIProvider):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def analyze_events(self, events: list[CorrectionEvent]) -> list[LearnedRule]:
+    def analyze_events(
+        self,
+        events: list[CorrectionEvent],
+        keylog_entries: list[KeyLogEntry] | None = None,
+    ) -> list[LearnedRule]:
         if not self.model:
             raise ProviderError("Ollama provider requires a model.")
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(events)},
+                {"role": "user", "content": build_user_prompt(events, keylog_entries=keylog_entries)},
             ],
             "stream": False,
             "format": "json",

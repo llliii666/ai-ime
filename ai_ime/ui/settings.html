@@ -18,6 +18,7 @@
         </div>
         <nav class="nav-list">
           <button class="nav-item active" data-page="general">常规</button>
+          <button class="nav-item" data-page="correction">纠错</button>
           <button class="nav-item" data-page="privacy">隐私</button>
           <button class="nav-item" data-page="model">模型</button>
           <button class="nav-item" data-page="rime">输入法</button>
@@ -84,11 +85,43 @@
             </label>
             <div class="field-row">
               <label for="keylog_file">键盘日志文件</label>
-              <div class="path-control">
+              <div class="path-control with-open">
                 <input id="keylog_file" type="text" />
                 <button class="secondary" data-browse="file" data-target="keylog_file">浏览</button>
+                <button class="secondary" id="openKeylogFile">打开记录</button>
               </div>
             </div>
+            <div class="button-row">
+              <button class="secondary" id="openLearningLog">打开学习日志</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="correction" data-title="纠错">
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>手动添加纠错</h2>
+              <span>适合自动读取不到中文时补录</span>
+            </div>
+            <div class="field-row">
+              <label for="manualWrongPinyin">错误拼音</label>
+              <input id="manualWrongPinyin" type="text" spellcheck="false" placeholder="例如 xainzai" />
+            </div>
+            <div class="field-row">
+              <label for="manualCorrectPinyin">正确拼音</label>
+              <input id="manualCorrectPinyin" type="text" spellcheck="false" placeholder="例如 xianzai" />
+            </div>
+            <div class="field-row">
+              <label for="manualCommittedText">对应中文</label>
+              <input id="manualCommittedText" type="text" placeholder="例如 现在" />
+            </div>
+            <div class="button-row">
+              <button class="primary" id="addManualCorrection">记录纠错</button>
+            </div>
+          </div>
+          <div class="notice subdued">
+            <strong>写入方式</strong>
+            <span>手动纠错会立即写入本地事件和规则；如果开启自动部署，也会更新小狼毫纠错词典。</span>
           </div>
         </section>
 
@@ -115,7 +148,7 @@
             <label class="switch-row">
               <span>
                 <strong>自动调用模型分析纠错事件</strong>
-                <small>开启后后台会把已识别出的纠错事件发送给当前模型通道。</small>
+                <small>开启后后台按自适应间隔批量发送；云端默认不带完整键盘日志。</small>
               </span>
               <input id="auto_analyze_with_ai" type="checkbox" />
             </label>

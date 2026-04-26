@@ -9,6 +9,7 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 import pystray
 
+from ai_ime.analysis_scheduler import AdaptiveAnalysisScheduler
 from ai_ime.config import default_data_dir, load_env_file
 from ai_ime.learning import AutoLearningEngine
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
@@ -22,6 +23,7 @@ class KeyboardLogger:
         self._hook: Any = None
         self._keyboard: Any = None
         self._learning: AutoLearningEngine | None = None
+        self._analysis_scheduler: AdaptiveAnalysisScheduler | None = None
 
     @property
     def running(self) -> bool:
@@ -34,6 +36,9 @@ class KeyboardLogger:
 
         self._keyboard = keyboard
         self._learning = AutoLearningEngine(settings)
+        if settings.auto_analyze_with_ai:
+            self._analysis_scheduler = AdaptiveAnalysisScheduler(settings)
+            self._analysis_scheduler.start()
         writer = KeyLogWriter(Path(settings.keylog_file))
 
         def on_event(event: Any) -> None:
@@ -62,6 +67,9 @@ class KeyboardLogger:
             self._keyboard.unhook(self._hook)
         self._hook = None
         self._learning = None
+        if self._analysis_scheduler is not None:
+            self._analysis_scheduler.stop()
+        self._analysis_scheduler = None
 
 
 def main(argv: list[str] | None = None) -> int:
