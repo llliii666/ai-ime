@@ -11,6 +11,7 @@ dependencies = [
 
 [project.scripts]
 ai-ime = "ai_ime.cli:main"
+ai-ime-start = "ai_ime.app:main"
 ai-ime-tray = "ai_ime.tray:main"
 
 [build-system]

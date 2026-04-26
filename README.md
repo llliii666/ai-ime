@@ -15,11 +15,13 @@ xainzai -> xianzai -> 现在
 ```powershell
 uv run python -m ai_ime --help
 uv run --no-editable ai-ime --help
+uv run python run.py
+uv run --no-editable ai-ime-start
 uv run --no-editable ai-ime-tray
 uv run python -m unittest discover -s tests
 ```
 
-`ai-ime-tray` starts the Windows notification-area app. Because this repository is currently under a path with non-ASCII characters, prefer `uv run --no-editable ai-ime...` for console-script entry points.
+`run.py` and `ai-ime-start` start the Windows notification-area app in the background. `ai-ime-tray` runs the tray app in the current process for debugging. Because this repository is currently under a path with non-ASCII characters, prefer `uv run --no-editable ai-ime...` for console-script entry points.
 
 ## MVP Workflow
 
@@ -103,7 +105,19 @@ uv run python -m ai_ime clear-keylog --log-file .data/keylog.jsonl --yes
 
 ## Tray App
 
-Run the local tray app:
+Start the local app in the background:
+
+```powershell
+uv run python run.py
+```
+
+Or use the installed script entry:
+
+```powershell
+uv run --no-editable ai-ime-start
+```
+
+Run the tray app in the current process for debugging:
 
 ```powershell
 uv run --no-editable ai-ime-tray

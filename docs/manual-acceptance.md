@@ -17,6 +17,18 @@ Expected:
 ## 1.1 Tray App
 
 ```powershell
+uv run python run.py
+```
+
+Expected:
+
+- The command returns after starting a background process.
+- An `AI` icon appears in the Windows notification area.
+- Keyboard logging starts if the listener is enabled in settings.
+
+For foreground debugging:
+
+```powershell
 uv run --no-editable ai-ime-tray
 ```
 

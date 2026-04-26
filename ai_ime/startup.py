@@ -11,6 +11,10 @@ APP_RUN_NAME = "AIIME"
 
 def default_startup_command() -> str:
     executable = Path(sys.executable)
+    if os.name == "nt":
+        pythonw = executable.with_name("pythonw.exe")
+        if pythonw.exists():
+            executable = pythonw
     return f'"{executable}" -m ai_ime.tray'
 
 

@@ -8,6 +8,7 @@ from typing import Any
 from ai_ime.config import load_env_file
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
 from ai_ime.rime.paths import find_existing_user_dir
+from ai_ime.runtime import clear_pid_file, write_pid_file
 from ai_ime.settings import AppSettings, env_api_key, load_app_settings, save_app_settings, write_provider_env
 from ai_ime.startup import set_start_on_login
 
@@ -55,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
     app = QApplication(argv or sys.argv)
+    write_pid_file()
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.critical(None, "AI IME", "System tray is not available.")
         return 1
@@ -117,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def quit_app() -> None:
         logger.stop()
+        clear_pid_file()
         app.quit()
 
     settings_action.triggered.connect(show_settings)
@@ -125,7 +128,11 @@ def main(argv: list[str] | None = None) -> int:
     tray.activated.connect(lambda reason: show_settings() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
     update_toggle_text()
     tray.show()
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        logger.stop()
+        clear_pid_file()
 
 
 def _build_icon(QPixmap: Any, QPainter: Any, QColor: Any, QFont: Any, QIcon: Any) -> Any:
