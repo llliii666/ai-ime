@@ -33,10 +33,8 @@ def render_dictionary(
         ).rstrip(),
         "",
     ]
-    for rule in rules:
-        if not rule.enabled:
-            continue
-        lines.append(f"{rule.committed_text}\t{rule.wrong_pinyin}\t{rule.weight}")
+    for text, pinyin, weight in _dedupe_entries(rules):
+        lines.append(f"{text}\t{pinyin}\t{weight}")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -66,3 +64,16 @@ def export_rime_files(
     )
     patch_path.write_text(render_schema_patch(dictionary_id=dictionary_id), encoding="utf-8", newline="\n")
     return dictionary_path, patch_path
+
+
+def _dedupe_entries(rules: list[LearnedRule]) -> list[tuple[str, str, int]]:
+    entries: dict[tuple[str, str], int] = {}
+    for rule in rules:
+        if not rule.enabled:
+            continue
+        key = (rule.committed_text, rule.wrong_pinyin)
+        entries[key] = max(entries.get(key, 0), rule.weight)
+    return [
+        (text, pinyin, weight)
+        for (text, pinyin), weight in sorted(entries.items(), key=lambda item: (-item[1], item[0][1], item[0][0]))
+    ]

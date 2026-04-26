@@ -28,6 +28,7 @@ class ProviderSchemaTests(unittest.TestCase):
 
         self.assertEqual(rules[0].wrong_pinyin, "xainzai")
         self.assertEqual(rules[0].confidence, 1.0)
+        self.assertEqual(rules[0].weight, 152000)
         self.assertEqual(rules[0].provider, "test")
 
     def test_parse_rules_json_rejects_bad_shape(self) -> None:

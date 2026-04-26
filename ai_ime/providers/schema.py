@@ -37,7 +37,8 @@ def _parse_rule(raw_rule: dict[str, Any], provider: str, index: int) -> LearnedR
     confidence = _optional_float(raw_rule, "confidence", 0.65)
     confidence = max(0.0, min(confidence, 1.0))
     count = max(1, _optional_int(raw_rule, "count", 1))
-    weight = _optional_int(raw_rule, "weight", int(100_000 + confidence * 50_000 + min(count, 50) * 1_000))
+    local_weight = int(100_000 + confidence * 50_000 + min(count, 50) * 1_000)
+    weight = max(_optional_int(raw_rule, "weight", local_weight), local_weight)
     mistake_type = str(raw_rule.get("mistake_type") or classify_mistake(wrong, correct))
     explanation = str(raw_rule.get("explanation") or f"AI provider {provider} recommended this rule.")
     return LearnedRule(

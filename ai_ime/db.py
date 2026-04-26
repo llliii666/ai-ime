@@ -91,9 +91,14 @@ def insert_event(conn: sqlite3.Connection, event: CorrectionEvent) -> int:
     return int(cursor.lastrowid)
 
 
-def list_events(conn: sqlite3.Connection) -> list[CorrectionEvent]:
+def list_events(conn: sqlite3.Connection, limit: int | None = None) -> list[CorrectionEvent]:
+    limit_clause = ""
+    params: tuple[int, ...] = ()
+    if limit is not None:
+        limit_clause = "LIMIT ?"
+        params = (limit,)
     rows = conn.execute(
-        """
+        f"""
         SELECT
             id,
             wrong_pinyin,
@@ -105,7 +110,9 @@ def list_events(conn: sqlite3.Connection) -> list[CorrectionEvent]:
             created_at
         FROM correction_events
         ORDER BY id
-        """
+        {limit_clause}
+        """,
+        params,
     ).fetchall()
     return [
         CorrectionEvent(
@@ -208,3 +215,28 @@ def list_rules(conn: sqlite3.Connection, enabled_only: bool = False) -> list[Lea
         )
         for row in rows
     ]
+
+
+def set_rule_enabled(conn: sqlite3.Connection, rule_id: int, enabled: bool) -> bool:
+    cursor = conn.execute(
+        """
+        UPDATE learned_rules
+        SET enabled = ?
+        WHERE id = ?
+        """,
+        (1 if enabled else 0, rule_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_rule(conn: sqlite3.Connection, rule_id: int) -> bool:
+    cursor = conn.execute("DELETE FROM learned_rules WHERE id = ?", (rule_id,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def clear_events(conn: sqlite3.Connection) -> int:
+    cursor = conn.execute("DELETE FROM correction_events")
+    conn.commit()
+    return cursor.rowcount

@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
-from .config import default_db_path
+from .config import default_db_path, env_value, load_env_file
 from .correction.normalize import normalize_pinyin
 from .correction.rules import aggregate_rules
-from .db import connect, init_db, insert_event, list_events, list_rules, upsert_rules
+from .db import (
+    clear_events,
+    connect,
+    delete_rule,
+    init_db,
+    insert_event,
+    list_events,
+    list_rules,
+    set_rule_enabled,
+    upsert_rules,
+)
 from .models import CorrectionEvent
 from .providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from .rime.deploy import deploy_rime_files, rollback_backup
@@ -15,8 +26,11 @@ from .rime.paths import find_existing_user_dir
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_env_file(Path(".env"))
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.env_file != Path(".env"):
+        load_env_file(args.env_file, override=True)
     if not hasattr(args, "handler"):
         parser.print_help()
         return 2
@@ -26,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-ime", description="Personal pinyin typo learning helper.")
     parser.add_argument("--db", type=Path, default=default_db_path(), help="SQLite database path.")
+    parser.add_argument("--env-file", type=Path, default=Path(".env"), help="Optional env file path.")
     subparsers = parser.add_subparsers(dest="command")
 
     init_parser = subparsers.add_parser("init-db", help="Create or migrate the SQLite database.")
@@ -39,6 +54,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument("--source", default="manual", help="Event source.")
     add_parser.set_defaults(handler=handle_add_event)
 
+    events_parser = subparsers.add_parser("list-events", help="List correction events.")
+    events_parser.add_argument("--limit", type=int, help="Maximum number of events to show.")
+    events_parser.set_defaults(handler=handle_list_events)
+
+    clear_events_parser = subparsers.add_parser("clear-events", help="Delete all correction events.")
+    clear_events_parser.add_argument("--yes", action="store_true", help="Confirm deletion.")
+    clear_events_parser.set_defaults(handler=handle_clear_events)
+
     analyze_parser = subparsers.add_parser("analyze", help="Aggregate events into learned rules.")
     analyze_parser.add_argument("--min-count", type=int, default=1, help="Minimum observations per rule.")
     analyze_parser.set_defaults(handler=handle_analyze)
@@ -47,12 +70,16 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_ai_parser.add_argument(
         "--provider",
         choices=["mock", "ollama", "openai-compatible"],
-        default="mock",
+        default=_provider_default(),
         help="AI provider to use.",
     )
     analyze_ai_parser.add_argument("--model", default="", help="Model name for ollama/openai-compatible.")
     analyze_ai_parser.add_argument("--base-url", default="", help="Provider base URL.")
-    analyze_ai_parser.add_argument("--api-key-env", default="OPENAI_API_KEY", help="Env var containing API key.")
+    analyze_ai_parser.add_argument(
+        "--api-key-env",
+        default=env_value("AI_IME_OPENAI_API_KEY_ENV", default="AI_IME_OPENAI_API_KEY"),
+        help="Env var containing API key.",
+    )
     analyze_ai_parser.add_argument("--timeout", type=float, default=60.0, help="Provider timeout in seconds.")
     analyze_ai_parser.add_argument(
         "--no-json-mode",
@@ -64,6 +91,19 @@ def build_parser() -> argparse.ArgumentParser:
     list_rules_parser = subparsers.add_parser("list-rules", help="List learned rules.")
     list_rules_parser.add_argument("--enabled-only", action="store_true", help="Only list enabled rules.")
     list_rules_parser.set_defaults(handler=handle_list_rules)
+
+    enable_rule_parser = subparsers.add_parser("enable-rule", help="Enable a learned rule by id.")
+    enable_rule_parser.add_argument("rule_id", type=int, help="Rule id.")
+    enable_rule_parser.set_defaults(handler=handle_enable_rule)
+
+    disable_rule_parser = subparsers.add_parser("disable-rule", help="Disable a learned rule by id.")
+    disable_rule_parser.add_argument("rule_id", type=int, help="Rule id.")
+    disable_rule_parser.set_defaults(handler=handle_disable_rule)
+
+    delete_rule_parser = subparsers.add_parser("delete-rule", help="Delete a learned rule by id.")
+    delete_rule_parser.add_argument("rule_id", type=int, help="Rule id.")
+    delete_rule_parser.add_argument("--yes", action="store_true", help="Confirm deletion.")
+    delete_rule_parser.set_defaults(handler=handle_delete_rule)
 
     export_parser = subparsers.add_parser("export-rime", help="Export Rime dictionary and schema patch files.")
     export_parser.add_argument("--out", type=Path, required=True, help="Output directory.")
@@ -117,6 +157,32 @@ def handle_add_event(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_list_events(args: argparse.Namespace) -> int:
+    with connect(args.db) as conn:
+        init_db(conn)
+        events = list_events(conn, limit=args.limit)
+    if not events:
+        print("No correction events.")
+        return 0
+    for event in events:
+        print(
+            f"#{event.id} {event.wrong_pinyin} -> {event.correct_pinyin} -> {event.committed_text} "
+            f"commit={event.commit_key} source={event.source} created={event.created_at}"
+        )
+    return 0
+
+
+def handle_clear_events(args: argparse.Namespace) -> int:
+    if not args.yes:
+        print("Refusing to delete events without --yes.")
+        return 2
+    with connect(args.db) as conn:
+        init_db(conn)
+        deleted = clear_events(conn)
+    print(f"Deleted {deleted} correction event(s).")
+    return 0
+
+
 def handle_analyze(args: argparse.Namespace) -> int:
     with connect(args.db) as conn:
         init_db(conn)
@@ -152,9 +218,32 @@ def handle_list_rules(args: argparse.Namespace) -> int:
     for rule in rules:
         enabled = "on" if rule.enabled else "off"
         print(
-            f"[{enabled}] {rule.wrong_pinyin} -> {rule.correct_pinyin} -> {rule.committed_text} "
-            f"confidence={rule.confidence:.3f} weight={rule.weight} count={rule.count} type={rule.mistake_type}"
+            f"#{rule.id} [{enabled}] {rule.wrong_pinyin} -> {rule.correct_pinyin} -> {rule.committed_text} "
+            f"confidence={rule.confidence:.3f} weight={rule.weight} count={rule.count} "
+            f"type={rule.mistake_type} provider={rule.provider}"
         )
+    return 0
+
+
+def handle_enable_rule(args: argparse.Namespace) -> int:
+    return _set_rule_enabled(args, enabled=True)
+
+
+def handle_disable_rule(args: argparse.Namespace) -> int:
+    return _set_rule_enabled(args, enabled=False)
+
+
+def handle_delete_rule(args: argparse.Namespace) -> int:
+    if not args.yes:
+        print("Refusing to delete rule without --yes.")
+        return 2
+    with connect(args.db) as conn:
+        init_db(conn)
+        deleted = delete_rule(conn, args.rule_id)
+    if not deleted:
+        print(f"Rule #{args.rule_id} was not found.")
+        return 1
+    print(f"Deleted rule #{args.rule_id}.")
     return 0
 
 
@@ -234,16 +323,35 @@ def _build_provider(args: argparse.Namespace):
         return MockProvider()
     if args.provider == "ollama":
         return OllamaProvider(
-            model=args.model,
-            base_url=args.base_url or "http://localhost:11434",
+            model=args.model or env_value("AI_IME_OLLAMA_MODEL", "AI_IME_AI_MODEL"),
+            base_url=args.base_url or env_value("AI_IME_OLLAMA_BASE_URL", default="http://localhost:11434"),
             timeout=args.timeout,
         )
     if args.provider == "openai-compatible":
         return OpenAICompatibleProvider(
-            model=args.model,
-            base_url=args.base_url or "https://api.openai.com/v1",
+            model=args.model or env_value("AI_IME_OPENAI_MODEL", "AI_IME_AI_MODEL", default="gpt-5.4-mini"),
+            base_url=args.base_url or env_value("AI_IME_OPENAI_BASE_URL", default="https://api.openai.com/v1"),
             api_key_env=args.api_key_env,
             timeout=args.timeout,
             use_json_mode=not args.no_json_mode,
         )
     raise ValueError(f"Unsupported provider: {args.provider}")
+
+
+def _set_rule_enabled(args: argparse.Namespace, enabled: bool) -> int:
+    with connect(args.db) as conn:
+        init_db(conn)
+        updated = set_rule_enabled(conn, args.rule_id, enabled=enabled)
+    if not updated:
+        print(f"Rule #{args.rule_id} was not found.")
+        return 1
+    state = "enabled" if enabled else "disabled"
+    print(f"{state.capitalize()} rule #{args.rule_id}.")
+    return 0
+
+
+def _provider_default() -> str:
+    provider = os.environ.get("AI_IME_PROVIDER", "mock")
+    if provider in {"mock", "ollama", "openai-compatible"}:
+        return provider
+    return "mock"
