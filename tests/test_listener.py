@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from ai_ime.correction.detector import KeyStroke
-from ai_ime.listener import KeyLogEntry, KeyLogWriter, keyboard_name_to_stroke
+from ai_ime.listener import KeyLogEntry, KeyLogWriter, keylog_to_sequence, keyboard_name_to_stroke
 
 
 class ListenerTests(unittest.TestCase):
@@ -22,6 +22,19 @@ class ListenerTests(unittest.TestCase):
 
             line = path.read_text(encoding="utf-8").strip()
             self.assertEqual(json.loads(line)["name"], "x")
+
+    def test_keylog_to_sequence_uses_down_events_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "keylog.jsonl"
+            writer = KeyLogWriter(path)
+            for name in ["x", "a", "i", "n", "z", "a", "i"]:
+                writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name=name))
+            writer.write(KeyLogEntry(timestamp=1.0, event_type="up", name="i"))
+            writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="backspace"))
+            writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="x"))
+            writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="space"))
+
+            self.assertEqual(keylog_to_sequence(path), "xainzai{backspace}x{space}")
 
 
 if __name__ == "__main__":
