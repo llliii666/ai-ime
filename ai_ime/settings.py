@@ -27,7 +27,7 @@ class AppSettings:
     rime_dir: str = ""
     rime_schema: str = "luna_pinyin"
     rime_dictionary: str = "ai_typo"
-    rime_base_dictionary: str = "luna_pinyin"
+    rime_base_dictionary: str = ""
     keylog_file: str = ""
 
 

@@ -21,8 +21,13 @@ class RimeGeneratorTests(unittest.TestCase):
                 )
             ]
         )
-        self.assertIn("import_tables:", content)
+        self.assertNotIn("import_tables:", content)
         self.assertIn("现在\txainzai\t141000", content)
+
+    def test_render_dictionary_can_import_base_dictionary_when_requested(self) -> None:
+        content = render_dictionary([], base_dictionary="rime_ice")
+
+        self.assertIn("import_tables:\n  - rime_ice", content)
 
     def test_render_dictionary_dedupes_entries_by_highest_weight(self) -> None:
         content = render_dictionary(

@@ -13,8 +13,7 @@ name: {dictionary_id}
 version: "{version}"
 sort: by_weight
 use_preset_vocabulary: true
-import_tables:
-  - {base_dictionary}
+{import_tables}
 ...
 """
 
@@ -22,13 +21,13 @@ import_tables:
 def render_dictionary(
     rules: list[LearnedRule],
     dictionary_id: str = "ai_typo",
-    base_dictionary: str = "luna_pinyin",
+    base_dictionary: str = "",
     version: str = "0.1.0",
 ) -> str:
     lines = [
         DICT_HEADER_TEMPLATE.format(
             dictionary_id=dictionary_id,
-            base_dictionary=base_dictionary,
+            import_tables=_render_import_tables(base_dictionary),
             version=version,
         ).rstrip(),
         "",
@@ -64,7 +63,7 @@ def export_rime_files(
     output_dir: Path,
     schema_id: str = "luna_pinyin",
     dictionary_id: str = "ai_typo",
-    base_dictionary: str = "luna_pinyin",
+    base_dictionary: str = "",
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     dictionary_path = output_dir / f"{dictionary_id}.dict.yaml"
@@ -89,3 +88,9 @@ def _dedupe_entries(rules: list[LearnedRule]) -> list[tuple[str, str, int]]:
         (text, pinyin, weight)
         for (text, pinyin), weight in sorted(entries.items(), key=lambda item: (-item[1], item[0][1], item[0][0]))
     ]
+
+
+def _render_import_tables(base_dictionary: str) -> str:
+    if not base_dictionary.strip():
+        return ""
+    return f"import_tables:\n  - {base_dictionary.strip()}"
