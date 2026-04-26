@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ai_ime.models import LearnedRule
-from ai_ime.rime.generator import render_dictionary, render_schema_patch
+from ai_ime.rime.generator import render_dictionary, render_schema_patch, render_typo_translator_patch
 
 
 MANIFEST_FILE = "manifest.json"
@@ -67,25 +67,19 @@ def deploy_rime_files(
 
 def merge_schema_patch(content: str, dictionary_id: str = "ai_typo") -> str:
     lines = content.splitlines()
-    target_line = f"  translator/dictionary: {dictionary_id}"
     patch_index = _find_top_level_patch(lines)
 
     if patch_index is None:
         prefix = content.rstrip()
         if prefix:
-            return f"{prefix}\n\npatch:\n{target_line}\n"
-        return f"patch:\n{target_line}\n"
+            return f"{prefix}\n\npatch:\n{render_typo_translator_patch(dictionary_id=dictionary_id)}"
+        return f"patch:\n{render_typo_translator_patch(dictionary_id=dictionary_id)}"
 
     block_end = _find_top_level_block_end(lines, patch_index)
-    translator_pattern = re.compile(r"^(\s*)translator/dictionary\s*:")
-    for index in range(patch_index + 1, block_end):
-        if translator_pattern.match(lines[index]):
-            indent = translator_pattern.match(lines[index]).group(1)  # type: ignore[union-attr]
-            lines[index] = f"{indent}translator/dictionary: {dictionary_id}"
-            return "\n".join(lines).rstrip() + "\n"
+    patch_body = _patch_body_lines(lines, patch_index + 1, block_end, dictionary_id=dictionary_id)
 
     insert_at = patch_index + 1
-    lines.insert(insert_at, target_line)
+    lines[insert_at:block_end] = render_typo_translator_patch(dictionary_id=dictionary_id).rstrip().splitlines() + patch_body
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -140,6 +134,49 @@ def _find_top_level_block_end(lines: list[str], start_index: int) -> int:
         if not line.startswith((" ", "\t")):
             return index
     return len(lines)
+
+
+def _patch_body_lines(lines: list[str], start_index: int, end_index: int, dictionary_id: str) -> list[str]:
+    body: list[str] = []
+    index = start_index
+    while index < end_index:
+        line = lines[index]
+        if _is_legacy_dictionary_override(line, dictionary_id=dictionary_id):
+            index += 1
+            continue
+        if _is_typo_translator_insert(line, dictionary_id=dictionary_id):
+            index += 1
+            continue
+        if _is_typo_translator_block(line, dictionary_id=dictionary_id):
+            index = _skip_indented_block(lines, index + 1, end_index)
+            continue
+        body.append(line)
+        index += 1
+    return body
+
+
+def _is_legacy_dictionary_override(line: str, dictionary_id: str) -> bool:
+    pattern = re.compile(rf"^\s*translator/dictionary\s*:\s*{re.escape(dictionary_id)}\s*(?:#.*)?$")
+    return bool(pattern.match(line))
+
+
+def _is_typo_translator_insert(line: str, dictionary_id: str) -> bool:
+    pattern = re.compile(rf"^\s*engine/translators/@[^:]+:\s*table_translator@{re.escape(dictionary_id)}\s*(?:#.*)?$")
+    return bool(pattern.match(line))
+
+
+def _is_typo_translator_block(line: str, dictionary_id: str) -> bool:
+    return bool(re.match(rf"^\s{{2}}{re.escape(dictionary_id)}\s*:\s*(?:#.*)?$", line))
+
+
+def _skip_indented_block(lines: list[str], start_index: int, end_index: int) -> int:
+    index = start_index
+    while index < end_index:
+        line = lines[index]
+        if line.strip() and not line.startswith(("    ", "\t")):
+            break
+        index += 1
+    return index
 
 
 def _backup_target(target: Path, backup_dir: Path, manifest: dict[str, list[dict[str, object]]]) -> None:
