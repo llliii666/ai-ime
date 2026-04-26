@@ -45,7 +45,8 @@ class RimeDeployTests(unittest.TestCase):
 
             self.assertTrue(result.patch_applied)
             content = existing_patch.read_text(encoding="utf-8")
-            self.assertIn("translator/dictionary: ai_typo", content)
+            self.assertIn("engine/translators/@before 1: table_translator@ai_typo", content)
+            self.assertIn("ai_typo:\n    dictionary: ai_typo", content)
             self.assertIn("menu/page_size: 9", content)
             self.assertEqual(result.patch_path, existing_patch)
 
@@ -55,15 +56,41 @@ class RimeDeployTests(unittest.TestCase):
         merged = merge_schema_patch(content)
 
         self.assertIn("octagram:\n  __patch:\n    translator/max_homophones: 5", merged)
-        self.assertIn("\npatch:\n  translator/dictionary: ai_typo\n", merged)
+        self.assertIn("\npatch:\n  engine/translators/@before 1: table_translator@ai_typo\n", merged)
 
-    def test_merge_schema_patch_replaces_existing_dictionary(self) -> None:
+    def test_merge_schema_patch_removes_legacy_dictionary_override(self) -> None:
         content = "patch:\n  translator/dictionary: old_dict\n  menu/page_size: 9\n"
 
         merged = merge_schema_patch(content, dictionary_id="ai_typo")
 
-        self.assertIn("translator/dictionary: ai_typo", merged)
-        self.assertNotIn("old_dict", merged)
+        self.assertIn("translator/dictionary: old_dict", merged)
+        self.assertIn("engine/translators/@before 1: table_translator@ai_typo", merged)
+
+    def test_merge_schema_patch_removes_bad_ai_typo_dictionary_override(self) -> None:
+        content = "patch:\n  translator/dictionary: ai_typo\n  menu/page_size: 9\n"
+
+        merged = merge_schema_patch(content, dictionary_id="ai_typo")
+
+        self.assertNotIn("translator/dictionary: ai_typo", merged)
+        self.assertIn("engine/translators/@before 1: table_translator@ai_typo", merged)
+        self.assertIn("menu/page_size: 9", merged)
+
+    def test_merge_schema_patch_replaces_existing_typo_translator_block(self) -> None:
+        content = (
+            "patch:\n"
+            "  engine/translators/@before 3: table_translator@ai_typo\n"
+            "  ai_typo:\n"
+            "    dictionary: old\n"
+            "  menu/page_size: 9\n"
+        )
+
+        merged = merge_schema_patch(content, dictionary_id="ai_typo")
+
+        self.assertNotIn("dictionary: old", merged)
+        self.assertNotIn("@before 3", merged)
+        self.assertIn("engine/translators/@before 1: table_translator@ai_typo", merged)
+        self.assertIn("ai_typo:\n    dictionary: ai_typo", merged)
+        self.assertIn("menu/page_size: 9", merged)
 
 
 if __name__ == "__main__":

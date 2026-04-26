@@ -52,8 +52,12 @@ class RimeGeneratorTests(unittest.TestCase):
         self.assertEqual(content.count("现在\txainzai"), 1)
         self.assertIn("现在\txainzai\t151000", content)
 
-    def test_render_schema_patch_points_to_dictionary(self) -> None:
-        self.assertIn("translator/dictionary: ai_typo", render_schema_patch())
+    def test_render_schema_patch_adds_dedicated_typo_translator(self) -> None:
+        content = render_schema_patch()
+
+        self.assertIn("engine/translators/@before 1: table_translator@ai_typo", content)
+        self.assertIn("ai_typo:\n    dictionary: ai_typo", content)
+        self.assertNotIn("translator/dictionary: ai_typo", content)
 
     def test_export_rime_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
