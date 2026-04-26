@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import sys
 import time
+import tkinter as tk
 from pathlib import Path
+from tkinter import messagebox, ttk
 from typing import Any
+
+from PIL import Image, ImageDraw, ImageFont
+import pystray
 
 from ai_ime.config import load_env_file
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
@@ -52,15 +57,7 @@ class KeyboardLogger:
 
 def main(argv: list[str] | None = None) -> int:
     load_env_file(Path(".env"))
-    from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPixmap
-    from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
-
-    app = QApplication(argv or sys.argv)
     write_pid_file()
-    if not QSystemTrayIcon.isSystemTrayAvailable():
-        QMessageBox.critical(None, "AI IME", "System tray is not available.")
-        return 1
-    app.setQuitOnLastWindowClosed(False)
 
     settings = load_app_settings()
     if not settings.rime_dir:
@@ -72,192 +69,185 @@ def main(argv: list[str] | None = None) -> int:
     if settings.listener_enabled:
         try:
             logger.start(settings)
-        except Exception as exc:  # UI boundary: show the error instead of crashing.
-            QMessageBox.warning(None, "AI IME", f"Keyboard listener failed: {exc}")
+        except Exception as exc:
+            _show_error(f"Keyboard listener failed: {exc}")
 
-    icon = _build_icon(QPixmap, QPainter, QColor, QFont, QIcon)
-    tray = QSystemTrayIcon(icon)
-    tray.setToolTip("AI IME")
-    menu = QMenu()
+    icon = pystray.Icon("ai-ime", _build_icon(), "AI IME")
 
-    settings_action = QAction("Settings")
-    toggle_action = QAction("Pause listener" if logger.running else "Start listener")
-    quit_action = QAction("Quit")
-    menu.addAction(settings_action)
-    menu.addAction(toggle_action)
-    menu.addSeparator()
-    menu.addAction(quit_action)
-    tray.setContextMenu(menu)
+    def refresh_menu() -> None:
+        icon.title = f"AI IME - {'listening' if logger.running else 'paused'}"
+        icon.menu = pystray.Menu(
+            pystray.MenuItem("Settings", show_settings, default=True),
+            pystray.MenuItem("Pause listener" if logger.running else "Start listener", toggle_listener),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Quit", quit_app),
+        )
+        icon.update_menu()
 
-    def update_toggle_text() -> None:
-        toggle_action.setText("Pause listener" if logger.running else "Start listener")
-        tray.setToolTip(f"AI IME - {'listening' if logger.running else 'paused'}")
-
-    def show_settings() -> None:
+    def show_settings(_icon: pystray.Icon | None = None, _item: pystray.MenuItem | None = None) -> None:
         nonlocal settings
-        dialog = SettingsDialog(settings)
-        if dialog.exec():
-            settings = dialog.to_settings()
-            save_app_settings(settings)
-            write_provider_env(settings, api_key=dialog.api_key())
-            set_start_on_login(settings.start_on_login)
-            if settings.listener_enabled:
-                logger.stop()
-                logger.start(settings)
-            else:
-                logger.stop()
-            update_toggle_text()
-
-    def toggle_listener() -> None:
-        settings.listener_enabled = not logger.running
-        if settings.listener_enabled:
-            logger.start(settings)
-        else:
-            logger.stop()
+        result = open_settings_window(settings)
+        if result is None:
+            return
+        settings, api_key = result
         save_app_settings(settings)
-        update_toggle_text()
+        write_provider_env(settings, api_key=api_key)
+        set_start_on_login(settings.start_on_login)
+        logger.stop()
+        if settings.listener_enabled:
+            try:
+                logger.start(settings)
+            except Exception as exc:
+                _show_error(f"Keyboard listener failed: {exc}")
+        refresh_menu()
 
-    def quit_app() -> None:
+    def toggle_listener(_icon: pystray.Icon | None = None, _item: pystray.MenuItem | None = None) -> None:
+        settings.listener_enabled = not logger.running
+        logger.stop()
+        if settings.listener_enabled:
+            try:
+                logger.start(settings)
+            except Exception as exc:
+                _show_error(f"Keyboard listener failed: {exc}")
+        save_app_settings(settings)
+        refresh_menu()
+
+    def quit_app(_icon: pystray.Icon | None = None, _item: pystray.MenuItem | None = None) -> None:
         logger.stop()
         clear_pid_file()
-        app.quit()
+        icon.stop()
 
-    settings_action.triggered.connect(show_settings)
-    toggle_action.triggered.connect(toggle_listener)
-    quit_action.triggered.connect(quit_app)
-    tray.activated.connect(lambda reason: show_settings() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
-    update_toggle_text()
-    tray.show()
     try:
-        return app.exec()
+        refresh_menu()
+        icon.run()
+        return 0
     finally:
         logger.stop()
         clear_pid_file()
 
 
-def _build_icon(QPixmap: Any, QPainter: Any, QColor: Any, QFont: Any, QIcon: Any) -> Any:
-    pixmap = QPixmap(64, 64)
-    pixmap.fill(QColor("#1f2937"))
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(QColor("#f9fafb"))
-    font = QFont("Segoe UI", 20)
-    font.setBold(True)
-    painter.setFont(font)
-    painter.drawText(pixmap.rect(), 0x84, "AI")
-    painter.end()
-    return QIcon(pixmap)
+def open_settings_window(initial: AppSettings) -> tuple[AppSettings, str] | None:
+    root = tk.Tk()
+    root.title("AI IME Settings")
+    root.geometry("620x430")
+    root.resizable(True, True)
 
+    listener_enabled = tk.BooleanVar(value=initial.listener_enabled)
+    record_full_keylog = tk.BooleanVar(value=initial.record_full_keylog)
+    send_full_keylog = tk.BooleanVar(value=initial.send_full_keylog)
+    start_on_login = tk.BooleanVar(value=initial.start_on_login)
+    provider = tk.StringVar(value=initial.provider)
+    openai_base_url = tk.StringVar(value=initial.openai_base_url)
+    openai_model = tk.StringVar(value=initial.openai_model)
+    openai_api_key = tk.StringVar(value=env_api_key(initial))
+    ollama_base_url = tk.StringVar(value=initial.ollama_base_url)
+    ollama_model = tk.StringVar(value=initial.ollama_model)
+    rime_dir = tk.StringVar(value=initial.rime_dir)
+    rime_schema = tk.StringVar(value=initial.rime_schema)
+    rime_dictionary = tk.StringVar(value=initial.rime_dictionary)
+    rime_base_dictionary = tk.StringVar(value=initial.rime_base_dictionary)
+    keylog_file = tk.StringVar(value=initial.keylog_file)
 
-class SettingsDialog:  # Wrapper replaced at runtime to avoid importing PySide6 during tests.
-    def __new__(cls, settings: AppSettings) -> Any:
-        from PySide6.QtWidgets import (
-            QCheckBox,
-            QComboBox,
-            QDialog,
-            QDialogButtonBox,
-            QFormLayout,
-            QLineEdit,
-            QPushButton,
-            QTabWidget,
-            QVBoxLayout,
-            QWidget,
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill="both", expand=True, padx=12, pady=12)
+
+    general = ttk.Frame(notebook, padding=12)
+    model = ttk.Frame(notebook, padding=12)
+    rime = ttk.Frame(notebook, padding=12)
+    notebook.add(general, text="General")
+    notebook.add(model, text="Model")
+    notebook.add(rime, text="Rime")
+
+    _check(general, "Enable listener", listener_enabled, 0)
+    _check(general, "Record full local keylog", record_full_keylog, 1)
+    _check(general, "Allow sending full keylog", send_full_keylog, 2)
+    _check(general, "Start on Windows login", start_on_login, 3)
+    _entry(general, "Keylog file", keylog_file, 4)
+
+    _combo(model, "Provider", provider, ["openai-compatible", "ollama", "mock"], 0)
+    _entry(model, "OpenAI-compatible base URL", openai_base_url, 1)
+    _entry(model, "OpenAI-compatible model", openai_model, 2)
+    _entry(model, "OpenAI-compatible API key", openai_api_key, 3, show="*")
+    _entry(model, "Ollama base URL", ollama_base_url, 4)
+    _entry(model, "Ollama model", ollama_model, 5)
+
+    _entry(rime, "Rime user directory", rime_dir, 0)
+    _entry(rime, "Schema", rime_schema, 1)
+    _entry(rime, "Generated dictionary", rime_dictionary, 2)
+    _entry(rime, "Base dictionary", rime_base_dictionary, 3)
+
+    result: dict[str, tuple[AppSettings, str] | None] = {"value": None}
+
+    def save() -> None:
+        result["value"] = (
+            AppSettings(
+                listener_enabled=listener_enabled.get(),
+                record_full_keylog=record_full_keylog.get(),
+                send_full_keylog=send_full_keylog.get(),
+                start_on_login=start_on_login.get(),
+                provider=provider.get(),
+                openai_base_url=openai_base_url.get().strip(),
+                openai_model=openai_model.get().strip() or "gpt-5.4-mini",
+                openai_api_key_env="AI_IME_OPENAI_API_KEY",
+                ollama_base_url=ollama_base_url.get().strip() or "http://localhost:11434",
+                ollama_model=ollama_model.get().strip(),
+                rime_dir=rime_dir.get().strip(),
+                rime_schema=rime_schema.get().strip() or "luna_pinyin",
+                rime_dictionary=rime_dictionary.get().strip() or "ai_typo",
+                rime_base_dictionary=rime_base_dictionary.get().strip() or "luna_pinyin",
+                keylog_file=keylog_file.get().strip(),
+            ),
+            openai_api_key.get(),
         )
+        root.destroy()
 
-        class _Dialog(QDialog):
-            def __init__(self, initial: AppSettings) -> None:
-                super().__init__()
-                self.setWindowTitle("AI IME Settings")
-                self.resize(560, 420)
+    def cancel() -> None:
+        root.destroy()
 
-                self.listener_enabled = QCheckBox()
-                self.listener_enabled.setChecked(initial.listener_enabled)
-                self.record_full_keylog = QCheckBox()
-                self.record_full_keylog.setChecked(initial.record_full_keylog)
-                self.send_full_keylog = QCheckBox()
-                self.send_full_keylog.setChecked(initial.send_full_keylog)
-                self.start_on_login = QCheckBox()
-                self.start_on_login.setChecked(initial.start_on_login)
-
-                self.provider = QComboBox()
-                self.provider.addItems(["openai-compatible", "ollama", "mock"])
-                self.provider.setCurrentText(initial.provider)
-                self.openai_base_url = QLineEdit(initial.openai_base_url)
-                self.openai_model = QLineEdit(initial.openai_model)
-                self.openai_api_key = QLineEdit(env_api_key(initial))
-                self.openai_api_key.setEchoMode(QLineEdit.EchoMode.Password)
-                self.ollama_base_url = QLineEdit(initial.ollama_base_url)
-                self.ollama_model = QLineEdit(initial.ollama_model)
-
-                self.rime_dir = QLineEdit(initial.rime_dir)
-                self.rime_schema = QLineEdit(initial.rime_schema)
-                self.rime_dictionary = QLineEdit(initial.rime_dictionary)
-                self.rime_base_dictionary = QLineEdit(initial.rime_base_dictionary)
-                self.keylog_file = QLineEdit(initial.keylog_file)
-
-                tabs = QTabWidget()
-                tabs.addTab(_form_tab(QFormLayout, QWidget, [
-                    ("Enable listener", self.listener_enabled),
-                    ("Record full local keylog", self.record_full_keylog),
-                    ("Allow sending full keylog", self.send_full_keylog),
-                    ("Start on Windows login", self.start_on_login),
-                    ("Keylog file", self.keylog_file),
-                ]), "General")
-                tabs.addTab(_form_tab(QFormLayout, QWidget, [
-                    ("Provider", self.provider),
-                    ("OpenAI-compatible base URL", self.openai_base_url),
-                    ("OpenAI-compatible model", self.openai_model),
-                    ("OpenAI-compatible API key", self.openai_api_key),
-                    ("Ollama base URL", self.ollama_base_url),
-                    ("Ollama model", self.ollama_model),
-                ]), "Model")
-                tabs.addTab(_form_tab(QFormLayout, QWidget, [
-                    ("Rime user directory", self.rime_dir),
-                    ("Schema", self.rime_schema),
-                    ("Generated dictionary", self.rime_dictionary),
-                    ("Base dictionary", self.rime_base_dictionary),
-                ]), "Rime")
-
-                buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-                buttons.accepted.connect(self.accept)
-                buttons.rejected.connect(self.reject)
-                layout = QVBoxLayout()
-                layout.addWidget(tabs)
-                layout.addWidget(buttons)
-                self.setLayout(layout)
-
-            def to_settings(self) -> AppSettings:
-                return AppSettings(
-                    listener_enabled=self.listener_enabled.isChecked(),
-                    record_full_keylog=self.record_full_keylog.isChecked(),
-                    send_full_keylog=self.send_full_keylog.isChecked(),
-                    start_on_login=self.start_on_login.isChecked(),
-                    provider=self.provider.currentText(),
-                    openai_base_url=self.openai_base_url.text().strip(),
-                    openai_model=self.openai_model.text().strip() or "gpt-5.4-mini",
-                    openai_api_key_env="AI_IME_OPENAI_API_KEY",
-                    ollama_base_url=self.ollama_base_url.text().strip() or "http://localhost:11434",
-                    ollama_model=self.ollama_model.text().strip(),
-                    rime_dir=self.rime_dir.text().strip(),
-                    rime_schema=self.rime_schema.text().strip() or "luna_pinyin",
-                    rime_dictionary=self.rime_dictionary.text().strip() or "ai_typo",
-                    rime_base_dictionary=self.rime_base_dictionary.text().strip() or "luna_pinyin",
-                    keylog_file=self.keylog_file.text().strip(),
-                )
-
-            def api_key(self) -> str:
-                return self.openai_api_key.text()
-
-        return _Dialog(settings)
+    buttons = ttk.Frame(root, padding=(12, 0, 12, 12))
+    buttons.pack(fill="x")
+    ttk.Button(buttons, text="Save", command=save).pack(side="right")
+    ttk.Button(buttons, text="Cancel", command=cancel).pack(side="right", padx=(0, 8))
+    root.protocol("WM_DELETE_WINDOW", cancel)
+    root.mainloop()
+    return result["value"]
 
 
-def _form_tab(QFormLayout: Any, QWidget: Any, rows: list[tuple[str, Any]]) -> Any:
-    widget = QWidget()
-    layout = QFormLayout()
-    for label, field in rows:
-        layout.addRow(label, field)
-    widget.setLayout(layout)
-    return widget
+def _build_icon() -> Image.Image:
+    image = Image.new("RGB", (64, 64), "#1f2937")
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype("segoeuib.ttf", 24)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((15, 18), "AI", fill="#f9fafb", font=font)
+    return image
+
+
+def _entry(parent: ttk.Frame, label: str, variable: tk.StringVar, row: int, show: str | None = None) -> None:
+    parent.columnconfigure(1, weight=1)
+    ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=6)
+    ttk.Entry(parent, textvariable=variable, show=show or "").grid(row=row, column=1, sticky="ew", pady=6)
+
+
+def _combo(parent: ttk.Frame, label: str, variable: tk.StringVar, values: list[str], row: int) -> None:
+    parent.columnconfigure(1, weight=1)
+    ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=6)
+    ttk.Combobox(parent, textvariable=variable, values=values, state="readonly").grid(row=row, column=1, sticky="ew", pady=6)
+
+
+def _check(parent: ttk.Frame, label: str, variable: tk.BooleanVar, row: int) -> None:
+    ttk.Checkbutton(parent, text=label, variable=variable).grid(row=row, column=0, columnspan=2, sticky="w", pady=6)
+
+
+def _show_error(message: str) -> None:
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showwarning("AI IME", message)
+        root.destroy()
+    except Exception:
+        print(message, file=sys.stderr)
 
 
 if __name__ == "__main__":

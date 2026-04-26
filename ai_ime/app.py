@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from ai_ime.config import default_data_dir
-from ai_ime.runtime import is_pid_running, pid_file_path, read_pid_file
+from ai_ime.runtime import clear_pid_file, is_pid_running, pid_file_path, read_pid_file
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.stop:
+        return stop_background()
+    if args.status:
+        return print_status()
     if args.foreground:
         from ai_ime.tray import main as tray_main
 
@@ -24,6 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-ime-start", description="Start AI IME as a background tray app.")
     parser.add_argument("--foreground", action="store_true", help="Run the tray app in the current process.")
     parser.add_argument("--force", action="store_true", help="Start even if a previous pid file exists.")
+    parser.add_argument("--status", action="store_true", help="Print background process status.")
+    parser.add_argument("--stop", action="store_true", help="Stop the background tray process.")
     return parser
 
 
@@ -45,9 +53,37 @@ def start_background(force: bool = False) -> int:
             creationflags=_detached_creationflags(),
             close_fds=True,
         )
-    print(f"AI IME started in background with pid {process.pid}.")
+    runtime_pid = _wait_for_runtime_pid(process.pid)
+    if runtime_pid and runtime_pid != process.pid:
+        print(f"AI IME started in background with launcher pid {process.pid}; tray pid {runtime_pid}.")
+    else:
+        print(f"AI IME started in background with pid {process.pid}.")
     print(f"Runtime pid file: {pid_file_path()}")
     print(f"Log file: {log_file}")
+    return 0
+
+
+def print_status() -> int:
+    pid = read_pid_file()
+    if pid and is_pid_running(pid):
+        print(f"AI IME is running with tray pid {pid}.")
+        return 0
+    print("AI IME is not running.")
+    return 1
+
+
+def stop_background() -> int:
+    pid = read_pid_file()
+    if not pid:
+        print("AI IME is not running.")
+        return 0
+    if not is_pid_running(pid):
+        clear_pid_file()
+        print("AI IME pid file was stale and has been cleared.")
+        return 0
+    _terminate_pid(pid)
+    clear_pid_file()
+    print(f"Stopped AI IME tray pid {pid}.")
     return 0
 
 
@@ -68,6 +104,25 @@ def _detached_creationflags() -> int:
     if os.name != "nt":
         return 0
     return subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+
+
+def _wait_for_runtime_pid(launcher_pid: int, timeout: float = 5.0) -> int:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        runtime_pid = read_pid_file()
+        if runtime_pid and is_pid_running(runtime_pid):
+            return runtime_pid
+        if not is_pid_running(launcher_pid):
+            break
+        time.sleep(0.1)
+    return launcher_pid
+
+
+def _terminate_pid(pid: int) -> None:
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    os.kill(pid, signal.SIGTERM)
 
 
 if __name__ == "__main__":

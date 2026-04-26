@@ -16,6 +16,8 @@ xainzai -> xianzai -> 现在
 uv run python -m ai_ime --help
 uv run --no-editable ai-ime --help
 uv run python run.py
+uv run python run.py --status
+uv run python run.py --stop
 uv run --no-editable ai-ime-start
 uv run --no-editable ai-ime-tray
 uv run python -m unittest discover -s tests
@@ -110,6 +112,15 @@ Start the local app in the background:
 ```powershell
 uv run python run.py
 ```
+
+Check or stop the background app:
+
+```powershell
+uv run python run.py --status
+uv run python run.py --stop
+```
+
+If the icon is not immediately visible, check the Windows notification-area overflow menu.
 
 Or use the installed script entry:
 

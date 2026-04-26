@@ -25,6 +25,13 @@ Expected:
 - The command returns after starting a background process.
 - An `AI` icon appears in the Windows notification area.
 - Keyboard logging starts if the listener is enabled in settings.
+- `uv run python run.py --status` reports a running tray pid.
+
+Stop the background app:
+
+```powershell
+uv run python run.py --stop
+```
 
 For foreground debugging:
 
