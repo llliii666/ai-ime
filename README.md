@@ -146,3 +146,28 @@ The notification-area icon opens the settings window. Current settings include:
 The settings window is a local `pywebview` desktop window backed by static HTML/CSS/JS in `ai_ime/ui/`. It does not open a browser tab; the page calls Python bridge methods for saving settings, testing providers, detecting Rime, and deploying the typo dictionary.
 
 The tray app uses Rime/小狼毫 as the IME engine. AI IME is a companion process that learns rules and writes Rime configuration; it is not a fork of 小狼毫 and does not replace 小狼毫's installer.
+
+## Automatic Learning
+
+When the tray listener is enabled, AI IME watches for this correction shape:
+
+```text
+wrong-pinyin -> backspace/delete -> correct-pinyin -> space/enter
+```
+
+After the confirm key, it reads the focused Windows text control through UI Automation, compares the text before and after commit, and stores a rule only if it can extract newly inserted Chinese text. If focused text cannot be read, the correction is skipped instead of creating a risky rule.
+
+To verify with 小狼毫:
+
+```text
+xainzai -> erase it -> xianzai -> space
+```
+
+Then check:
+
+```powershell
+uv run python -m ai_ime list-events
+uv run python -m ai_ime list-rules
+```
+
+If automatic deploy is enabled, AI IME writes the updated `ai_typo` dictionary and attempts to run 小狼毫 redeploy. Some applications do not expose focused text through UI Automation; Notepad is the recommended first manual test target.

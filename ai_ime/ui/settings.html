@@ -70,6 +70,13 @@
             </label>
             <label class="switch-row">
               <span>
+                <strong>自动识别并学习纠错</strong>
+                <small>发现错拼、删除、重输、确认后，尝试读取提交中文并写入规则。</small>
+              </span>
+              <input id="auto_learn_enabled" type="checkbox" />
+            </label>
+            <label class="switch-row">
+              <span>
                 <strong>开机自启动</strong>
                 <small>登录 Windows 后自动启动托盘程序。</small>
               </span>
@@ -104,6 +111,13 @@
                 <small>本地模型不受该开关限制，云端模型默认不发送完整日志。</small>
               </span>
               <input id="send_full_keylog" type="checkbox" />
+            </label>
+            <label class="switch-row">
+              <span>
+                <strong>自动调用模型分析纠错事件</strong>
+                <small>开启后后台会把已识别出的纠错事件发送给当前模型通道。</small>
+              </span>
+              <input id="auto_analyze_with_ai" type="checkbox" />
             </label>
           </div>
           <div class="notice">
@@ -191,6 +205,13 @@
               <label for="rime_base_dictionary">可选导入词典</label>
               <input id="rime_base_dictionary" type="text" />
             </div>
+            <label class="switch-row">
+              <span>
+                <strong>学习后自动部署到小狼毫</strong>
+                <small>新规则写入后自动更新 Rime 文件，并尝试触发小狼毫重新部署。</small>
+              </span>
+              <input id="auto_deploy_rime" type="checkbox" />
+            </label>
             <div class="button-row">
               <button class="secondary" id="detectRime">自动检测 Rime</button>
               <button class="secondary" id="openRimeDir">打开目录</button>

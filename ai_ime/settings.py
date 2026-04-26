@@ -15,6 +15,9 @@ SETTINGS_FILE_NAME = "settings.json"
 @dataclass
 class AppSettings:
     listener_enabled: bool = True
+    auto_learn_enabled: bool = True
+    auto_analyze_with_ai: bool = False
+    auto_deploy_rime: bool = True
     record_full_keylog: bool = True
     send_full_keylog: bool = False
     start_on_login: bool = False
@@ -64,6 +67,9 @@ def save_app_settings(settings: AppSettings, path: Path | None = None) -> Path:
 def settings_from_env() -> AppSettings:
     data_dir = default_data_dir()
     return AppSettings(
+        auto_learn_enabled=env_value("AI_IME_AUTO_LEARN", default="true").lower() != "false",
+        auto_analyze_with_ai=env_value("AI_IME_AUTO_ANALYZE_WITH_AI", default="false").lower() == "true",
+        auto_deploy_rime=env_value("AI_IME_AUTO_DEPLOY_RIME", default="true").lower() != "false",
         provider=env_value("AI_IME_PROVIDER", default="openai-compatible"),
         openai_base_url=env_value("AI_IME_OPENAI_BASE_URL", default="https://api.openai.com/v1"),
         openai_model=env_value("AI_IME_OPENAI_MODEL", "AI_IME_AI_MODEL", default="gpt-5.4-mini"),
@@ -78,6 +84,9 @@ def write_provider_env(settings: AppSettings, api_key: str | None = None, path: 
     existing = _read_env_map(path)
     existing.update(
         {
+            "AI_IME_AUTO_LEARN": "true" if settings.auto_learn_enabled else "false",
+            "AI_IME_AUTO_ANALYZE_WITH_AI": "true" if settings.auto_analyze_with_ai else "false",
+            "AI_IME_AUTO_DEPLOY_RIME": "true" if settings.auto_deploy_rime else "false",
             "AI_IME_PROVIDER": settings.provider,
             "AI_IME_OPENAI_BASE_URL": settings.openai_base_url,
             "AI_IME_OPENAI_MODEL": settings.openai_model,

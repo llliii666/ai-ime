@@ -19,6 +19,17 @@ class DetectorTests(unittest.TestCase):
             event = detector.feed(stroke)
         self.assertIsNone(event)
 
+    def test_detector_emits_pending_correction_without_committed_text(self) -> None:
+        detector = CorrectionDetector()
+        pending = None
+        for stroke in parse_sequence("xainzai{delete}xianzai{enter}"):
+            pending = detector.feed_pending(stroke) or pending
+
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.wrong_pinyin, "xainzai")
+        self.assertEqual(pending.correct_pinyin, "xianzai")
+        self.assertEqual(pending.commit_key, "enter")
+
     def test_detector_ignores_same_pinyin(self) -> None:
         event = detect_from_sequence("xianzai{backspace}xianzai{space}", committed_text="现在")
 

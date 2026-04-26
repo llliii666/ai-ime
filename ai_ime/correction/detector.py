@@ -16,6 +16,25 @@ class KeyStroke:
     value: str = ""
 
 
+@dataclass(frozen=True)
+class PendingCorrection:
+    wrong_pinyin: str
+    correct_pinyin: str
+    commit_key: str
+
+    def to_event(self, committed_text: str, source: str = "detector") -> CorrectionEvent | None:
+        text = committed_text.strip()
+        if not text:
+            return None
+        return CorrectionEvent(
+            wrong_pinyin=self.wrong_pinyin,
+            correct_pinyin=self.correct_pinyin,
+            committed_text=text,
+            commit_key=self.commit_key,
+            source=source,
+        )
+
+
 class CorrectionDetector:
     def __init__(self) -> None:
         self._current = ""
@@ -24,6 +43,12 @@ class CorrectionDetector:
         self._editing = False
 
     def feed(self, stroke: KeyStroke, committed_text: str | None = None) -> CorrectionEvent | None:
+        pending = self.feed_pending(stroke)
+        if pending is None or not committed_text:
+            return None
+        return pending.to_event(committed_text)
+
+    def feed_pending(self, stroke: KeyStroke) -> PendingCorrection | None:
         if stroke.kind == "char":
             char = normalize_pinyin(stroke.value)
             if not char:
@@ -42,9 +67,9 @@ class CorrectionDetector:
             return None
 
         if stroke.kind in CONFIRM_KEYS:
-            event = self._build_event(stroke.kind, committed_text)
+            pending = self._build_pending(stroke.kind)
             self.reset()
-            return event
+            return pending
 
         if stroke.kind == "reset":
             self.reset()
@@ -58,20 +83,17 @@ class CorrectionDetector:
         self._correct = ""
         self._editing = False
 
-    def _build_event(self, commit_key: str, committed_text: str | None) -> CorrectionEvent | None:
-        if not self._wrong or not self._correct or not committed_text:
+    def _build_pending(self, commit_key: str) -> PendingCorrection | None:
+        if not self._wrong or not self._correct:
             return None
         wrong = normalize_pinyin(self._wrong)
         correct = normalize_pinyin(self._correct)
-        text = committed_text.strip()
-        if not wrong or not correct or not text or wrong == correct:
+        if not wrong or not correct or wrong == correct:
             return None
-        return CorrectionEvent(
+        return PendingCorrection(
             wrong_pinyin=wrong,
             correct_pinyin=correct,
-            committed_text=text,
             commit_key=commit_key,
-            source="detector",
         )
 
 

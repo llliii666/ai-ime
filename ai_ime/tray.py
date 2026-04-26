@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 import pystray
 
 from ai_ime.config import default_data_dir, load_env_file
+from ai_ime.learning import AutoLearningEngine
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
 from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
 from ai_ime.runtime import clear_pid_file, write_pid_file
@@ -20,6 +21,7 @@ class KeyboardLogger:
     def __init__(self) -> None:
         self._hook: Any = None
         self._keyboard: Any = None
+        self._learning: AutoLearningEngine | None = None
 
     @property
     def running(self) -> bool:
@@ -31,19 +33,27 @@ class KeyboardLogger:
         import keyboard  # type: ignore[import-not-found]
 
         self._keyboard = keyboard
+        self._learning = AutoLearningEngine(settings)
         writer = KeyLogWriter(Path(settings.keylog_file))
 
         def on_event(event: Any) -> None:
+            event_type = str(getattr(event, "event_type", ""))
+            name = str(getattr(event, "name", ""))
             if not settings.record_full_keylog:
+                if self._learning is not None:
+                    self._learning.handle_key_event(event_type, name)
                 return
-            writer.write(
-                KeyLogEntry(
-                    timestamp=time.time(),
-                    event_type=str(getattr(event, "event_type", "")),
-                    name=str(getattr(event, "name", "")),
-                    scan_code=getattr(event, "scan_code", None),
+            if settings.record_full_keylog:
+                writer.write(
+                    KeyLogEntry(
+                        timestamp=time.time(),
+                        event_type=event_type,
+                        name=name,
+                        scan_code=getattr(event, "scan_code", None),
+                    )
                 )
-            )
+            if self._learning is not None:
+                self._learning.handle_key_event(event_type, name)
 
         self._hook = keyboard.hook(on_event)
 
@@ -51,6 +61,7 @@ class KeyboardLogger:
         if self._hook is not None and self._keyboard is not None:
             self._keyboard.unhook(self._hook)
         self._hook = None
+        self._learning = None
 
 
 def main(argv: list[str] | None = None) -> int:

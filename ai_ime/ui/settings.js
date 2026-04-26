@@ -1,5 +1,8 @@
 const fieldIds = [
   "listener_enabled",
+  "auto_learn_enabled",
+  "auto_analyze_with_ai",
+  "auto_deploy_rime",
   "record_full_keylog",
   "send_full_keylog",
   "start_on_login",
