@@ -14,6 +14,19 @@ Expected:
 - `.env` provider config is detected.
 - Rime user data directory is detected, or shown as a warning if Rime is not installed.
 
+## 1.1 Tray App
+
+```powershell
+uv run --no-editable ai-ime-tray
+```
+
+Expected:
+
+- An `AI` icon appears in the Windows notification area.
+- Clicking the icon opens the AI IME settings window.
+- Settings can be saved without crashing.
+- Exiting from the tray menu closes the app.
+
 ## 2. Rule Learning
 
 ```powershell

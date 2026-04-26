@@ -6,10 +6,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "keyboard>=0.13.5",
+    "pyside6>=6.11.0",
 ]
 
 [project.scripts]
 ai-ime = "ai_ime.cli:main"
+ai-ime-tray = "ai_ime.tray:main"
 
 [build-system]
 requires = ["hatchling"]

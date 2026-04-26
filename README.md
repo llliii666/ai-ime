@@ -15,8 +15,11 @@ xainzai -> xianzai -> 现在
 ```powershell
 uv run python -m ai_ime --help
 uv run --no-editable ai-ime --help
+uv run --no-editable ai-ime-tray
 uv run python -m unittest discover -s tests
 ```
+
+`ai-ime-tray` starts the Windows notification-area app. Because this repository is currently under a path with non-ASCII characters, prefer `uv run --no-editable ai-ime...` for console-script entry points.
 
 ## MVP Workflow
 
@@ -97,3 +100,22 @@ To turn a local keylog into a correction event, provide the final committed text
 uv run python -m ai_ime --db .data/ai-ime.db detect-log --log-file .data/keylog.jsonl --text 现在
 uv run python -m ai_ime clear-keylog --log-file .data/keylog.jsonl --yes
 ```
+
+## Tray App
+
+Run the local tray app:
+
+```powershell
+uv run --no-editable ai-ime-tray
+```
+
+The notification-area icon opens the settings window. Current settings include:
+
+- Listener enabled/paused
+- Record full local keylog
+- Allow sending full keylog
+- Start on Windows login
+- OpenAI-compatible and Ollama provider settings
+- Rime user directory and dictionary settings
+
+The tray app uses Rime/小狼毫 as the IME engine. AI IME is a companion process that learns rules and writes Rime configuration; it is not a fork of 小狼毫 and does not replace 小狼毫's installer.
