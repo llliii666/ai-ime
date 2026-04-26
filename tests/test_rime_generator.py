@@ -3,7 +3,13 @@ import unittest
 from pathlib import Path
 
 from ai_ime.models import LearnedRule
-from ai_ime.rime.generator import export_rime_files, render_dictionary, render_schema_patch
+from ai_ime.rime.generator import (
+    export_rime_files,
+    merge_lua_bootstrap,
+    render_dictionary,
+    render_lua_logger,
+    render_schema_patch,
+)
 
 
 class RimeGeneratorTests(unittest.TestCase):
@@ -61,8 +67,27 @@ class RimeGeneratorTests(unittest.TestCase):
         content = render_schema_patch()
 
         self.assertIn("engine/translators/@before 1: table_translator@ai_typo", content)
+        self.assertIn("engine/processors/@before 0: lua_processor@ai_ime_logger_processor", content)
         self.assertIn("ai_typo:\n    dictionary: ai_typo", content)
         self.assertNotIn("translator/dictionary: ai_typo", content)
+
+    def test_render_lua_logger_writes_semantic_commit_fields(self) -> None:
+        content = render_lua_logger(Path(r"C:\Users\tester\AppData\Local\AIIME\keylog.jsonl"))
+
+        self.assertIn("LOG_PATH = [[C:\\Users\\tester\\AppData\\Local\\AIIME\\keylog.jsonl]]", content)
+        self.assertIn('"source":' , content)
+        self.assertIn('"candidate_text":', content)
+        self.assertIn("commit_notifier:connect", content)
+
+    def test_merge_lua_bootstrap_replaces_generated_block(self) -> None:
+        content = "-- custom\n-- AI IME logger bootstrap: start\nold = true\n-- AI IME logger bootstrap: end\n"
+
+        merged = merge_lua_bootstrap(content)
+
+        self.assertIn("-- custom", merged)
+        self.assertIn('local ai_ime_logger = require("ai_ime_logger")', merged)
+        self.assertEqual(merged.count("AI IME logger bootstrap: start"), 1)
+        self.assertNotIn("old = true", merged)
 
     def test_export_rime_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

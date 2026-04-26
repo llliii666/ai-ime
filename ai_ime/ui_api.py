@@ -7,11 +7,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from ai_ime.config import default_data_dir
-from ai_ime.config import default_db_path, load_env_file
+from ai_ime.analysis_scheduler import SCHEDULER_STATE_FILE, AdaptiveAnalysisScheduler
+from ai_ime.config import default_data_dir, default_db_path, load_env_file
 from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.correction.rules import event_supports_rule
-from ai_ime.analysis_scheduler import AdaptiveAnalysisScheduler, SCHEDULER_STATE_FILE
 from ai_ime.db import (
     connect,
     delete_event,
@@ -249,6 +248,8 @@ class SettingsApi:
                 schema_id=settings.rime_schema,
                 dictionary_id=settings.rime_dictionary,
                 base_dictionary=settings.rime_base_dictionary,
+                semantic_log_path=resolved_keylog_path(settings),
+                semantic_logger_enabled=settings.record_candidate_commits,
             )
         except Exception as exc:
             return _error(f"部署到小狼毫失败：{exc}")
@@ -258,6 +259,8 @@ class SettingsApi:
             "message": f"已写入 {len(rules)} 条启用规则。请在小狼毫中重新部署一次。",
             "dictionaryPath": str(result.dictionary_path),
             "patchPath": str(result.patch_path),
+            "luaPath": str(result.lua_path),
+            "rimeLuaPath": str(result.rime_lua_path),
             "backupDir": str(result.backup_dir),
         }
 
@@ -581,6 +584,7 @@ def _storage_paths(settings: AppSettings, env_path: Path, db_path: Path) -> list
             [
                 _path_payload("rimeDir", "Rime 用户目录", rime_dir, "小狼毫用户词典和方案配置目录。"),
                 _path_payload("rimeDict", "AI 纠错词典", rime_dir / f"{settings.rime_dictionary}.dict.yaml", "AI IME 写入的纠错词典文件。"),
+                _path_payload("rimeLuaLogger", "Rime Lua 语义日志插件", rime_dir / "lua" / "ai_ime_logger.lua", "小狼毫内部用于记录拼音候选上屏的 Lua 插件。"),
                 _path_payload("rimeBackups", "Rime 备份目录", rime_dir / ".ai-ime-backups", "部署 Rime 文件前创建的备份目录。"),
             ]
         )

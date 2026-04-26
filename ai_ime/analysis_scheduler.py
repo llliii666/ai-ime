@@ -13,11 +13,10 @@ from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.correction.rules import event_supports_rule
 from ai_ime.db import connect, init_db, list_events, upsert_rules
 from ai_ime.learning import _append_learning_log, _build_provider
-from ai_ime.listener import KeyLogEntry, keylog_file_lock
+from ai_ime.listener import KeyLogEntry, keyboard_name_to_stroke, keylog_file_lock
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers import ProviderError
 from ai_ime.settings import AppSettings, resolved_keylog_path
-
 
 INTERVAL_TIERS_SECONDS = (600, 1800, 3600, 7200, 18000, 28800, 43200)
 DEFAULT_INTERVAL_SECONDS = 1800
@@ -179,7 +178,7 @@ def keylog_payload_for_settings(settings: AppSettings, entries: list[KeyLogEntry
     if should_send_keylog_entries(settings):
         return entries
     if settings.record_candidate_commits:
-        return [entry for entry in entries if entry.event_type == "commit"]
+        return [entry for entry in entries if entry.event_type == "commit" or _is_semantic_edit_key(entry)]
     return []
 
 
@@ -231,21 +230,52 @@ def _supported_event_triples(events: list[CorrectionEvent]) -> set[tuple[str, st
 def _supported_keylog_triples(entries: list[KeyLogEntry]) -> set[tuple[str, str, str]]:
     triples: set[tuple[str, str, str]] = set()
     candidate: KeyLogEntry | None = None
+    last_rime_commit: KeyLogEntry | None = None
+    saw_delete_after_last_rime_commit = False
     for entry in entries:
+        if _is_semantic_edit_key(entry):
+            saw_delete_after_last_rime_commit = last_rime_commit is not None
+            continue
         if entry.event_type != "commit":
             continue
         if entry.role == "candidate":
             candidate = entry
             continue
-        if entry.role != "correction" or candidate is None:
+        if entry.role == "correction" and candidate is not None:
+            _add_supported_keylog_triple(triples, candidate, entry)
+            candidate = None
             continue
-        wrong = normalize_pinyin(candidate.pinyin or candidate.name)
-        correct = normalize_pinyin(entry.pinyin or entry.name)
-        text = (entry.committed_text or "").strip()
-        if wrong and correct and text and wrong != correct:
-            triples.add((wrong, correct, text))
+        if _is_rime_commit(entry):
+            if last_rime_commit is not None and saw_delete_after_last_rime_commit:
+                _add_supported_keylog_triple(triples, last_rime_commit, entry)
+            last_rime_commit = entry
+            saw_delete_after_last_rime_commit = False
+            continue
         candidate = None
     return triples
+
+
+def _add_supported_keylog_triple(
+    triples: set[tuple[str, str, str]],
+    wrong_entry: KeyLogEntry,
+    correct_entry: KeyLogEntry,
+) -> None:
+    wrong = normalize_pinyin(wrong_entry.pinyin or wrong_entry.name)
+    correct = normalize_pinyin(correct_entry.pinyin or correct_entry.name)
+    text = (correct_entry.committed_text or correct_entry.candidate_text or "").strip()
+    if wrong and correct and text and wrong != correct:
+        triples.add((wrong, correct, text))
+
+
+def _is_rime_commit(entry: KeyLogEntry) -> bool:
+    return entry.event_type == "commit" and (entry.role == "rime_commit" or entry.source == "rime-lua")
+
+
+def _is_semantic_edit_key(entry: KeyLogEntry) -> bool:
+    if entry.event_type != "down":
+        return False
+    stroke = keyboard_name_to_stroke(entry.name)
+    return stroke is not None and stroke.kind in {"backspace", "delete"}
 
 
 def _failure_state(previous: AnalysisSchedulerState, next_interval: int) -> AnalysisSchedulerState:
@@ -349,6 +379,11 @@ def _keylog_entry_from_payload(payload: dict[str, Any]) -> KeyLogEntry:
         pinyin=_optional_str(payload.get("pinyin")),
         committed_text=_optional_str(payload.get("committed_text")),
         role=_optional_str(payload.get("role")),
+        source=_optional_str(payload.get("source")),
+        candidate_text=_optional_str(payload.get("candidate_text")),
+        candidate_comment=_optional_str(payload.get("candidate_comment")),
+        selection_index=_optional_int(payload.get("selection_index")),
+        commit_key=_optional_str(payload.get("commit_key")),
     )
 
 
@@ -357,6 +392,21 @@ def _optional_str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _next_idle_interval(current_interval: int) -> int:

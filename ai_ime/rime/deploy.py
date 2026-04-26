@@ -7,9 +7,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from ai_ime.config import default_data_dir
 from ai_ime.models import LearnedRule
-from ai_ime.rime.generator import render_dictionary, render_schema_patch, render_typo_translator_patch
-
+from ai_ime.rime.generator import (
+    AI_IME_LUA_PROCESSOR,
+    merge_lua_bootstrap,
+    render_dictionary,
+    render_lua_logger,
+    render_lua_processor_patch,
+    render_schema_patch,
+    render_typo_translator_patch,
+)
 
 MANIFEST_FILE = "manifest.json"
 
@@ -18,6 +26,8 @@ MANIFEST_FILE = "manifest.json"
 class DeploymentResult:
     dictionary_path: Path
     patch_path: Path
+    lua_path: Path
+    rime_lua_path: Path
     backup_dir: Path
     patch_applied: bool
 
@@ -29,14 +39,19 @@ def deploy_rime_files(
     dictionary_id: str = "ai_typo",
     base_dictionary: str = "",
     force_schema_patch: bool = False,
+    semantic_log_path: Path | None = None,
+    semantic_logger_enabled: bool = True,
 ) -> DeploymentResult:
     rime_dir.mkdir(parents=True, exist_ok=True)
     backup_dir = _create_backup_dir(rime_dir)
     dictionary_path = rime_dir / f"{dictionary_id}.dict.yaml"
     patch_path = rime_dir / f"{schema_id}.custom.yaml"
+    lua_path = rime_dir / "lua" / "ai_ime_logger.lua"
+    rime_lua_path = rime_dir / "rime.lua"
+    log_path = semantic_log_path or default_data_dir() / "keylog.jsonl"
 
     manifest = {"files": []}
-    _backup_target(dictionary_path, backup_dir, manifest)
+    _backup_target(dictionary_path, backup_dir, manifest, root=rime_dir)
 
     dictionary_path.write_text(
         render_dictionary(rules, dictionary_id=dictionary_id, base_dictionary=base_dictionary),
@@ -50,16 +65,28 @@ def deploy_rime_files(
         existing_content = patch_path.read_text(encoding="utf-8-sig")
         merged_content = merge_schema_patch(existing_content, dictionary_id=dictionary_id)
         if existing_content != merged_content:
-            _backup_target(patch_path, backup_dir, manifest)
+            _backup_target(patch_path, backup_dir, manifest, root=rime_dir)
             patch_path.write_text(merged_content, encoding="utf-8", newline="\n")
     else:
-        _backup_target(patch_path, backup_dir, manifest)
+        _backup_target(patch_path, backup_dir, manifest, root=rime_dir)
         patch_path.write_text(patch_content, encoding="utf-8", newline="\n")
+
+    _backup_target(lua_path, backup_dir, manifest, root=rime_dir)
+    lua_path.parent.mkdir(parents=True, exist_ok=True)
+    lua_path.write_text(render_lua_logger(log_path, enabled=semantic_logger_enabled), encoding="utf-8", newline="\n")
+
+    existing_rime_lua = rime_lua_path.read_text(encoding="utf-8-sig") if rime_lua_path.exists() else ""
+    merged_rime_lua = merge_lua_bootstrap(existing_rime_lua)
+    if existing_rime_lua != merged_rime_lua:
+        _backup_target(rime_lua_path, backup_dir, manifest, root=rime_dir)
+        rime_lua_path.write_text(merged_rime_lua, encoding="utf-8", newline="\n")
 
     _write_manifest(backup_dir, manifest)
     return DeploymentResult(
         dictionary_path=dictionary_path,
         patch_path=patch_path,
+        lua_path=lua_path,
+        rime_lua_path=rime_lua_path,
         backup_dir=backup_dir,
         patch_applied=patch_applied,
     )
@@ -72,14 +99,14 @@ def merge_schema_patch(content: str, dictionary_id: str = "ai_typo") -> str:
     if patch_index is None:
         prefix = content.rstrip()
         if prefix:
-            return f"{prefix}\n\npatch:\n{render_typo_translator_patch(dictionary_id=dictionary_id)}"
-        return f"patch:\n{render_typo_translator_patch(dictionary_id=dictionary_id)}"
+            return f"{prefix}\n\npatch:\n{_render_ai_schema_patch_body(dictionary_id=dictionary_id)}"
+        return f"patch:\n{_render_ai_schema_patch_body(dictionary_id=dictionary_id)}"
 
     block_end = _find_top_level_block_end(lines, patch_index)
     patch_body = _patch_body_lines(lines, patch_index + 1, block_end, dictionary_id=dictionary_id)
 
     insert_at = patch_index + 1
-    lines[insert_at:block_end] = render_typo_translator_patch(dictionary_id=dictionary_id).rstrip().splitlines() + patch_body
+    lines[insert_at:block_end] = _render_ai_schema_patch_body(dictionary_id=dictionary_id).rstrip().splitlines() + patch_body
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -147,6 +174,9 @@ def _patch_body_lines(lines: list[str], start_index: int, end_index: int, dictio
         if _is_typo_translator_insert(line, dictionary_id=dictionary_id):
             index += 1
             continue
+        if _is_lua_processor_insert(line):
+            index += 1
+            continue
         if _is_typo_translator_block(line, dictionary_id=dictionary_id):
             index = _skip_indented_block(lines, index + 1, end_index)
             continue
@@ -165,6 +195,11 @@ def _is_typo_translator_insert(line: str, dictionary_id: str) -> bool:
     return bool(pattern.match(line))
 
 
+def _is_lua_processor_insert(line: str) -> bool:
+    pattern = re.compile(rf"^\s*engine/processors/@[^:]+:\s*lua_processor@{re.escape(AI_IME_LUA_PROCESSOR)}\s*(?:#.*)?$")
+    return bool(pattern.match(line))
+
+
 def _is_typo_translator_block(line: str, dictionary_id: str) -> bool:
     return bool(re.match(rf"^\s{{2}}{re.escape(dictionary_id)}\s*:\s*(?:#.*)?$", line))
 
@@ -179,9 +214,17 @@ def _skip_indented_block(lines: list[str], start_index: int, end_index: int) -> 
     return index
 
 
-def _backup_target(target: Path, backup_dir: Path, manifest: dict[str, list[dict[str, object]]]) -> None:
-    relative_path = target.name
-    backup_name = target.name
+def _backup_target(
+    target: Path,
+    backup_dir: Path,
+    manifest: dict[str, list[dict[str, object]]],
+    root: Path | None = None,
+) -> None:
+    try:
+        relative_path = target.relative_to(root or target.parent).as_posix()
+    except ValueError:
+        relative_path = target.name
+    backup_name = relative_path.replace("/", "__").replace("\\", "__")
     existed = target.exists()
     if existed:
         shutil.copy2(target, backup_dir / backup_name)
@@ -200,3 +243,7 @@ def _write_manifest(backup_dir: Path, manifest: dict[str, list[dict[str, object]
         encoding="utf-8",
         newline="\n",
     )
+
+
+def _render_ai_schema_patch_body(dictionary_id: str) -> str:
+    return render_lua_processor_patch() + render_typo_translator_patch(dictionary_id=dictionary_id)

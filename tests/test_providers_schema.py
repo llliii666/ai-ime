@@ -48,16 +48,22 @@ class ProviderSchemaTests(unittest.TestCase):
                     name="xianzai",
                     pinyin="xianzai",
                     committed_text="现在",
-                    role="correction",
+                    role="rime_commit",
+                    source="rime-lua",
+                    candidate_text="现在",
+                    selection_index=0,
+                    commit_key="1",
                 )
             ],
         )
 
         self.assertIn('"keylog_entries"', prompt)
         self.assertIn('"wrong_committed_text": "喜爱能在"', prompt)
-        self.assertIn('"role": "correction"', prompt)
-        self.assertIn("原始按键事件只能帮助理解操作顺序，不能单独生成规则", SYSTEM_PROMPT)
-        self.assertIn("规则三元组必须严格来自证据", SYSTEM_PROMPT)
+        self.assertIn('"role": "rime_commit"', prompt)
+        self.assertIn('"source": "rime-lua"', prompt)
+        self.assertIn('"candidate_text": "现在"', prompt)
+        self.assertIn("不能单独生成规则", SYSTEM_PROMPT)
+        self.assertIn("rime_commit(错误拼音/错误中文) -> backspace/delete -> rime_commit", SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

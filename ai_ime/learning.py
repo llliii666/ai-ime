@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from ai_ime.config import default_data_dir, default_db_path
 from ai_ime.correction.detector import CONFIRM_KEYS, CorrectionDetector, KeyStroke, PendingCorrection
@@ -156,6 +156,8 @@ class AutoLearningEngine:
                 schema_id=self.settings.rime_schema,
                 dictionary_id=self.settings.rime_dictionary,
                 base_dictionary=self.settings.rime_base_dictionary,
+                semantic_log_path=resolved_keylog_path(self.settings),
+                semantic_logger_enabled=self.settings.record_candidate_commits,
             )
             deployed = True
             rime_redeployed = self.rime_redeployer()
@@ -213,5 +215,6 @@ def _append_semantic_keylog(path: Path, pinyin: str, committed_text: str, role: 
             pinyin=pinyin,
             committed_text=committed_text,
             role=role,
+            source="auto-ui",
         )
     )

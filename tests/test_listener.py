@@ -4,7 +4,14 @@ import unittest
 from pathlib import Path
 
 from ai_ime.correction.detector import KeyStroke
-from ai_ime.listener import KeyLogEntry, KeyLogWriter, keylog_file_lock, keylog_to_sequence, keyboard_name_to_stroke, read_keylog
+from ai_ime.listener import (
+    KeyLogEntry,
+    KeyLogWriter,
+    keyboard_name_to_stroke,
+    keylog_file_lock,
+    keylog_to_sequence,
+    read_keylog,
+)
 
 
 class ListenerTests(unittest.TestCase):
@@ -30,6 +37,11 @@ class ListenerTests(unittest.TestCase):
                     pinyin="xianzai",
                     committed_text="现在",
                     role="correction",
+                    source="rime-lua",
+                    candidate_text="现在",
+                    candidate_comment="",
+                    selection_index=0,
+                    commit_key="1",
                 )
             )
 
@@ -37,7 +49,13 @@ class ListenerTests(unittest.TestCase):
             payload = json.loads(line)
             self.assertEqual(payload["name"], "xianzai")
             self.assertEqual(payload["committed_text"], "现在")
-            self.assertEqual(read_keylog(path)[0].role, "correction")
+            self.assertNotIn("candidate_comment", payload)
+            entry = read_keylog(path)[0]
+            self.assertEqual(entry.role, "correction")
+            self.assertEqual(entry.source, "rime-lua")
+            self.assertEqual(entry.candidate_text, "现在")
+            self.assertEqual(entry.selection_index, 0)
+            self.assertEqual(entry.commit_key, "1")
 
     def test_keylog_file_lock_uses_sidecar_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

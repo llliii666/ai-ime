@@ -6,9 +6,9 @@ from unittest.mock import patch
 
 from ai_ime.analysis_scheduler import (
     AdaptiveAnalysisScheduler,
-    AnalysisSchedulerState,
     choose_next_interval,
     delete_keylog_prefix,
+    filter_rules_by_evidence,
     keylog_payload_for_settings,
     load_scheduler_state,
     read_keylog_entries_since,
@@ -74,6 +74,75 @@ class AnalysisSchedulerTests(unittest.TestCase):
 
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0].event_type, "commit")
+
+    def test_keylog_payload_keeps_rime_delete_between_semantic_commits(self) -> None:
+        entries = [
+            KeyLogEntry(
+                timestamp=1.0,
+                event_type="commit",
+                name="xainzai",
+                pinyin="xainzai",
+                committed_text="喜爱能在",
+                role="rime_commit",
+                source="rime-lua",
+            ),
+            KeyLogEntry(timestamp=2.0, event_type="down", name="backspace", role="rime_edit", source="rime-lua"),
+            KeyLogEntry(
+                timestamp=3.0,
+                event_type="commit",
+                name="xianzai",
+                pinyin="xianzai",
+                committed_text="现在",
+                role="rime_commit",
+                source="rime-lua",
+            ),
+        ]
+
+        payload = keylog_payload_for_settings(
+            AppSettings(provider="openai-compatible", send_full_keylog=False, record_candidate_commits=True),
+            entries,
+        )
+
+        self.assertEqual([entry.name for entry in payload], ["xainzai", "backspace", "xianzai"])
+
+    def test_rime_commit_delete_commit_sequence_supports_ai_rule(self) -> None:
+        entries = [
+            KeyLogEntry(
+                timestamp=1.0,
+                event_type="commit",
+                name="xainzai",
+                pinyin="xainzai",
+                committed_text="喜爱能在",
+                role="rime_commit",
+                source="rime-lua",
+            ),
+            KeyLogEntry(timestamp=2.0, event_type="down", name="delete", role="rime_edit", source="rime-lua"),
+            KeyLogEntry(
+                timestamp=3.0,
+                event_type="commit",
+                name="xianzai",
+                pinyin="xianzai",
+                committed_text="现在",
+                role="rime_commit",
+                source="rime-lua",
+            ),
+        ]
+        rules = [
+            LearnedRule(
+                wrong_pinyin="xainzai",
+                correct_pinyin="xianzai",
+                committed_text="现在",
+                confidence=0.85,
+                weight=145000,
+                count=1,
+                mistake_type="semantic_correction",
+                provider="fake",
+            )
+        ]
+
+        accepted = filter_rules_by_evidence(rules, events=[], keylog_entries=entries)
+
+        self.assertEqual(accepted, rules)
 
     def test_read_keylog_entries_since_offset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

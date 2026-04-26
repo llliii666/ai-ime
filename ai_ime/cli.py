@@ -165,6 +165,12 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_parser.add_argument("--schema", default="luna_pinyin", help="Rime schema id to patch.")
     deploy_parser.add_argument("--dictionary", default="ai_typo", help="Generated dictionary id.")
     deploy_parser.add_argument("--base-dictionary", default="", help="Optional base Rime dictionary to import.")
+    deploy_parser.add_argument("--keylog-file", type=Path, help="JSONL file used by the Rime Lua semantic logger.")
+    deploy_parser.add_argument(
+        "--disable-semantic-logger",
+        action="store_true",
+        help="Deploy the Lua hook but disable candidate commit logging.",
+    )
     deploy_parser.add_argument(
         "--force-schema-patch",
         action="store_true",
@@ -402,12 +408,16 @@ def handle_deploy_rime(args: argparse.Namespace) -> int:
         dictionary_id=args.dictionary,
         base_dictionary=args.base_dictionary,
         force_schema_patch=args.force_schema_patch,
+        semantic_log_path=args.keylog_file,
+        semantic_logger_enabled=not args.disable_semantic_logger,
     )
     print(f"Deployed Rime dictionary: {result.dictionary_path}")
     if result.patch_applied:
         print(f"Deployed Rime schema patch: {result.patch_path}")
     else:
         print(f"Existing schema patch was not overwritten. Pending patch: {result.patch_path}")
+    print(f"Deployed Rime Lua logger: {result.lua_path}")
+    print(f"Updated Rime Lua bootstrap: {result.rime_lua_path}")
     print(f"Backup directory: {result.backup_dir}")
     return 0
 

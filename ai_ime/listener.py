@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import Event
-from typing import Any, Iterator
+from typing import Any
 
 from ai_ime.correction.detector import CANDIDATE_SELECTION_KEYS, DELETE_KEYS, KeyStroke
 
@@ -25,6 +26,11 @@ class KeyLogEntry:
     pinyin: str | None = None
     committed_text: str | None = None
     role: str | None = None
+    source: str | None = None
+    candidate_text: str | None = None
+    candidate_comment: str | None = None
+    selection_index: int | None = None
+    commit_key: str | None = None
 
 
 class KeyLogWriter:
@@ -35,7 +41,12 @@ class KeyLogWriter:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with keylog_file_lock(self.path):
             with self.path.open("a", encoding="utf-8", newline="\n") as handle:
-                handle.write(json.dumps(asdict(entry), ensure_ascii=False) + "\n")
+                payload = {
+                    key: value
+                    for key, value in asdict(entry).items()
+                    if value is not None and (not isinstance(value, str) or value or key in {"event_type", "name"})
+                }
+                handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 @contextmanager
@@ -55,7 +66,7 @@ def keylog_file_lock(path: Path, timeout: float = 3.0, stale_after: float = 30.0
                 except FileNotFoundError:
                     continue
             if time.monotonic() >= deadline:
-                raise TimeoutError(f"Timed out waiting for keylog lock: {lock_path}")
+                raise TimeoutError(f"Timed out waiting for keylog lock: {lock_path}") from None
             time.sleep(0.025)
     try:
         os.write(handle, str(os.getpid()).encode("ascii", errors="ignore"))
@@ -137,6 +148,11 @@ def read_keylog(path: Path) -> list[KeyLogEntry]:
                 pinyin=payload.get("pinyin"),
                 committed_text=payload.get("committed_text"),
                 role=payload.get("role"),
+                source=payload.get("source"),
+                candidate_text=payload.get("candidate_text"),
+                candidate_comment=payload.get("candidate_comment"),
+                selection_index=_optional_int(payload.get("selection_index")),
+                commit_key=payload.get("commit_key"),
             )
         )
     return entries
@@ -188,3 +204,18 @@ def _stroke_to_sequence_part(stroke: KeyStroke) -> str:
     if stroke.kind == "char":
         return stroke.value
     return f"{{{stroke.kind}}}"
+
+
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
