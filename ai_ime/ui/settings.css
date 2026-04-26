@@ -399,6 +399,12 @@ select:focus {
   background: #1d4ed8;
 }
 
+.primary:disabled,
+.secondary:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
 .secondary {
   border-color: var(--line-strong);
   background: #ffffff;

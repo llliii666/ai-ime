@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 from importlib import resources
 from pathlib import Path
-
-import webview
 
 from ai_ime.config import default_data_dir
 from ai_ime.ui_api import SettingsApi
@@ -20,10 +19,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.smoke:
         return 0 if html_path.exists() else 1
 
+    import webview
+
     api = SettingsApi()
+    html = render_settings_html(api)
     window = webview.create_window(
         "AI IME 设置",
-        url=html_path.as_uri(),
+        html=html,
         js_api=api,
         width=1120,
         height=760,
@@ -40,6 +42,29 @@ def main(argv: list[str] | None = None) -> int:
 
 def _settings_html_path() -> Path:
     return Path(str(resources.files("ai_ime") / "ui" / "settings.html")).resolve()
+
+
+def render_settings_html(api: SettingsApi) -> str:
+    html = _read_ui_resource("settings.html")
+    css = _read_ui_resource("settings.css")
+    js = _read_ui_resource("settings.js")
+    initial_state = json.dumps(api.load_state(), ensure_ascii=False)
+    html = html.replace('    <link rel="stylesheet" href="./settings.css" />', f"    <style>\n{css}\n    </style>")
+    html = html.replace(
+        '    <script src="./settings.js"></script>',
+        f'    <script id="initial-state" type="application/json">{_escape_script_json(initial_state)}</script>\n'
+        f"    <script>\n{js}\n    </script>",
+    )
+    return html
+
+
+def _read_ui_resource(name: str) -> str:
+    path = Path(str(resources.files("ai_ime") / "ui" / name))
+    return path.read_text(encoding="utf-8")
+
+
+def _escape_script_json(value: str) -> str:
+    return value.replace("</", "<\\/")
 
 
 if __name__ == "__main__":

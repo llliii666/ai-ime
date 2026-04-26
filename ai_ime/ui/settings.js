@@ -22,17 +22,16 @@ const providerLabels = {
 };
 
 let lastState = null;
+let bridgeReady = false;
 
 window.addEventListener("pywebviewready", () => {
-  bindUi();
-  loadState();
+  handleBridgeReady();
 });
 
 window.addEventListener("DOMContentLoaded", () => {
   bindUi();
-  if (!window.pywebview) {
-    setStatus("等待 WebView bridge 注入", "error");
-  }
+  applyInitialState();
+  waitForBridge();
 });
 
 function bindUi() {
@@ -55,6 +54,7 @@ function bindUi() {
   document.getElementById("testProvider").addEventListener("click", testProvider);
   document.getElementById("provider").addEventListener("change", syncTopbar);
   document.getElementById("listener_enabled").addEventListener("change", syncTopbar);
+  syncActionState();
 }
 
 async function loadState() {
@@ -220,6 +220,62 @@ function apiReady() {
   if (window.pywebview && window.pywebview.api) {
     return true;
   }
-  setStatus("WebView bridge 未就绪", "error");
+  setStatus("本地后端正在连接，请稍候");
   return false;
+}
+
+function applyInitialState() {
+  const node = document.getElementById("initial-state");
+  if (!node || !node.textContent) {
+    syncTopbar();
+    return;
+  }
+  try {
+    const state = JSON.parse(node.textContent);
+    if (!state.ok) {
+      setStatus(state.message || "初始配置读取失败", "error");
+      return;
+    }
+    lastState = state;
+    fillForm(state.settings);
+    renderMeta(state.meta);
+    syncTopbar();
+    setStatus("配置已预载，正在连接本地后端");
+  } catch {
+    setStatus("初始配置解析失败", "error");
+  }
+}
+
+function syncActionState() {
+  const pending = !bridgeReady && !(window.pywebview && window.pywebview.api);
+  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, [data-browse]").forEach((button) => {
+    button.disabled = pending;
+    button.classList.toggle("is-pending", pending);
+  });
+  if (pending) {
+    window.setTimeout(syncActionState, 100);
+  }
+}
+
+function handleBridgeReady() {
+  if (bridgeReady) {
+    return;
+  }
+  bridgeReady = true;
+  bindUi();
+  syncActionState();
+  loadState();
+}
+
+function waitForBridge(attempt = 0) {
+  if (window.pywebview && window.pywebview.api) {
+    handleBridgeReady();
+    return;
+  }
+  setStatus("正在连接本地后端");
+  if (attempt < 80) {
+    window.setTimeout(() => waitForBridge(attempt + 1), 50);
+    return;
+  }
+  setStatus("本地后端连接超时，请关闭窗口后重试", "error");
 }

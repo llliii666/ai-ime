@@ -19,11 +19,11 @@ class SettingsApi:
     def __init__(self, env_path: Path = Path(".env"), db_path: Path | None = None) -> None:
         self.env_path = env_path
         self.db_path = db_path or default_db_path()
-        self.window: Any = None
+        self._window: Any = None
         load_env_file(self.env_path)
 
     def bind_window(self, window: Any) -> None:
-        self.window = window
+        self._window = window
 
     def load_state(self) -> dict[str, Any]:
         settings = _settings_with_detected_rime(load_app_settings())
@@ -66,16 +66,16 @@ class SettingsApi:
         }
 
     def choose_path(self, kind: str, current: str = "") -> dict[str, Any]:
-        if self.window is None:
+        if self._window is None:
             return _error("设置窗口还未就绪。")
         directory = current if kind == "directory" else str(Path(current).parent) if current else ""
         try:
             import webview
 
             if kind == "directory":
-                result = self.window.create_file_dialog(webview.FileDialog.FOLDER, directory=directory)
+                result = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory=directory)
             else:
-                result = self.window.create_file_dialog(
+                result = self._window.create_file_dialog(
                     webview.FileDialog.SAVE,
                     directory=directory,
                     save_filename=Path(current).name if current else "keylog.jsonl",
@@ -150,14 +150,18 @@ class SettingsApi:
         return {"ok": True}
 
     def _database_stats(self) -> dict[str, int]:
+        conn = None
         try:
-            with connect(self.db_path) as conn:
-                init_db(conn)
-                events_count = len(list_events(conn))
-                enabled_rules_count = len(list_rules(conn, enabled_only=True))
-                rules_count = len(list_rules(conn))
+            conn = connect(self.db_path)
+            init_db(conn)
+            events_count = len(list_events(conn))
+            enabled_rules_count = len(list_rules(conn, enabled_only=True))
+            rules_count = len(list_rules(conn))
         except Exception:
             return {"eventsCount": 0, "enabledRulesCount": 0, "rulesCount": 0}
+        finally:
+            if conn is not None:
+                conn.close()
         return {
             "eventsCount": events_count,
             "enabledRulesCount": enabled_rules_count,
