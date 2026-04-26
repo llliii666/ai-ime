@@ -4,7 +4,9 @@ const fieldIds = [
   "auto_analyze_with_ai",
   "auto_deploy_rime",
   "record_full_keylog",
+  "record_candidate_commits",
   "send_full_keylog",
+  "delete_sent_keylog",
   "start_on_login",
   "provider",
   "provider_preset",
@@ -594,6 +596,7 @@ function renderAnalysisNowResult(response) {
   summary.appendChild(analysisSummaryItem("模型返回", `${response.returnedRules ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("写入规则", `${response.upsertedRules ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("本地拒绝", `${response.rejectedRules ?? 0} 条`));
+  summary.appendChild(analysisSummaryItem("清理日志", formatBytes(response.deletedKeylogBytes ?? 0)));
   container.appendChild(summary);
 
   const accepted = Array.isArray(response.rules) ? response.rules : [];
@@ -618,6 +621,17 @@ function analysisSummaryItem(label, value) {
   item.appendChild(span);
   item.appendChild(strong);
   return item;
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (bytes <= 0) {
+    return "0 B";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 function renderAnalysisRuleGroup(title, records, type) {

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import Event
-from typing import Any
+from typing import Any, Iterator
 
 from ai_ime.correction.detector import CANDIDATE_SELECTION_KEYS, DELETE_KEYS, KeyStroke
 
@@ -31,8 +33,52 @@ class KeyLogWriter:
 
     def write(self, entry: KeyLogEntry) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write(json.dumps(asdict(entry), ensure_ascii=False) + "\n")
+        with keylog_file_lock(self.path):
+            with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(asdict(entry), ensure_ascii=False) + "\n")
+
+
+@contextmanager
+def keylog_file_lock(path: Path, timeout: float = 3.0, stale_after: float = 30.0) -> Iterator[None]:
+    lock_path = _keylog_lock_path(path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    handle: int | None = None
+    while handle is None:
+        try:
+            handle = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if _is_stale_lock(lock_path, stale_after):
+                try:
+                    lock_path.unlink()
+                    continue
+                except FileNotFoundError:
+                    continue
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for keylog lock: {lock_path}")
+            time.sleep(0.025)
+    try:
+        os.write(handle, str(os.getpid()).encode("ascii", errors="ignore"))
+        yield
+    finally:
+        os.close(handle)
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _keylog_lock_path(path: Path) -> Path:
+    suffix = f"{path.suffix}.lock" if path.suffix else ".lock"
+    return path.with_suffix(suffix)
+
+
+def _is_stale_lock(path: Path, stale_after: float) -> bool:
+    try:
+        age = time.time() - path.stat().st_mtime
+    except FileNotFoundError:
+        return False
+    return age > stale_after
 
 
 def keyboard_name_to_stroke(name: str) -> KeyStroke | None:
@@ -76,7 +122,9 @@ def read_keylog(path: Path) -> list[KeyLogEntry]:
     entries: list[KeyLogEntry] = []
     if not path.exists():
         return entries
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
+    with keylog_file_lock(path):
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    for line in lines:
         if not line.strip():
             continue
         payload = json.loads(line)

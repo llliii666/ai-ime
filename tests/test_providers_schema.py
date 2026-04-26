@@ -56,8 +56,8 @@ class ProviderSchemaTests(unittest.TestCase):
         self.assertIn('"keylog_entries"', prompt)
         self.assertIn('"wrong_committed_text": "喜爱能在"', prompt)
         self.assertIn('"role": "correction"', prompt)
-        self.assertIn("Do not derive rules from raw key events alone", SYSTEM_PROMPT)
-        self.assertIn("exactly match a correction event or a semantic candidate/correction pair", SYSTEM_PROMPT)
+        self.assertIn("原始按键事件只能帮助理解操作顺序，不能单独生成规则", SYSTEM_PROMPT)
+        self.assertIn("规则三元组必须严格来自证据", SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

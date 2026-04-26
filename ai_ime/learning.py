@@ -76,7 +76,7 @@ class AutoLearningEngine:
         return pending
 
     def _schedule_commit_snapshot(self, pinyin: str, before_text: str | None, role: str) -> None:
-        if not self.settings.record_full_keylog:
+        if not self.settings.record_candidate_commits:
             return
         if self.async_finalize:
             timer = threading.Timer(self.capture_delay, self.finalize_commit_snapshot, args=(pinyin, before_text, role))
@@ -126,7 +126,7 @@ class AutoLearningEngine:
                 f"skip pending={pending.wrong_pinyin}->{pending.correct_pinyin}: low-confidence automatic event"
             )
             return None
-        if self.settings.record_full_keylog:
+        if self.settings.record_candidate_commits:
             _append_semantic_keylog(
                 resolved_keylog_path(self.settings),
                 pinyin=pending.correct_pinyin,

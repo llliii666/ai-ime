@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from ai_ime.correction.detector import KeyStroke
-from ai_ime.listener import KeyLogEntry, KeyLogWriter, keylog_to_sequence, keyboard_name_to_stroke, read_keylog
+from ai_ime.listener import KeyLogEntry, KeyLogWriter, keylog_file_lock, keylog_to_sequence, keyboard_name_to_stroke, read_keylog
 
 
 class ListenerTests(unittest.TestCase):
@@ -38,6 +38,16 @@ class ListenerTests(unittest.TestCase):
             self.assertEqual(payload["name"], "xianzai")
             self.assertEqual(payload["committed_text"], "现在")
             self.assertEqual(read_keylog(path)[0].role, "correction")
+
+    def test_keylog_file_lock_uses_sidecar_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "keylog.jsonl"
+            lock_path = Path(tmp) / "keylog.jsonl.lock"
+
+            with keylog_file_lock(path):
+                self.assertTrue(lock_path.exists())
+
+            self.assertFalse(lock_path.exists())
 
     def test_keylog_to_sequence_uses_down_events_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

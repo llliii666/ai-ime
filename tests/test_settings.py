@@ -10,12 +10,19 @@ class SettingsTests(unittest.TestCase):
     def test_save_and_load_app_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "settings.json"
-            settings = AppSettings(record_full_keylog=False, rime_schema="double_pinyin")
+            settings = AppSettings(
+                record_full_keylog=False,
+                record_candidate_commits=False,
+                delete_sent_keylog=False,
+                rime_schema="double_pinyin",
+            )
 
             save_app_settings(settings, path)
             loaded = load_app_settings(path)
 
             self.assertFalse(loaded.record_full_keylog)
+            self.assertFalse(loaded.record_candidate_commits)
+            self.assertFalse(loaded.delete_sent_keylog)
             self.assertEqual(loaded.rime_schema, "double_pinyin")
 
     def test_write_provider_env(self) -> None:
@@ -35,6 +42,8 @@ class SettingsTests(unittest.TestCase):
             self.assertIn("AI_IME_PROVIDER_PRESET=deepseek", content)
             self.assertIn("AI_IME_OPENAI_MODEL=gpt-5.4-mini", content)
             self.assertIn("AI_IME_OPENAI_API_KEY=test-key", content)
+            self.assertIn("AI_IME_RECORD_CANDIDATE_COMMITS=true", content)
+            self.assertIn("AI_IME_DELETE_SENT_KEYLOG=true", content)
 
     def test_load_app_settings_infers_missing_provider_preset_from_base_url(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

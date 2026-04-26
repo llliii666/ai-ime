@@ -112,7 +112,7 @@ class ProviderHttpTests(unittest.TestCase):
         self.assertEqual(rules[0].provider, "openai-compatible")
         self.assertEqual(RecordingHandler.requests[0]["path"], "/v1/chat/completions")
         self.assertEqual(RecordingHandler.requests[0]["payload"]["response_format"], {"type": "json_object"})
-        self.assertIn("Return only one JSON object", RecordingHandler.requests[0]["payload"]["messages"][0]["content"])
+        self.assertIn("你必须只返回一个 JSON 对象", RecordingHandler.requests[0]["payload"]["messages"][0]["content"])
         self.assertIn('"events"', RecordingHandler.requests[0]["payload"]["messages"][1]["content"])
 
     def test_openai_compatible_provider_lists_models(self) -> None:

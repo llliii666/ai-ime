@@ -108,6 +108,61 @@ class LearningTests(unittest.TestCase):
                 ("correction", "xianzai", "现在"),
             ])
 
+    def test_engine_records_candidate_text_without_full_keylog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            settings = AppSettings(
+                auto_deploy_rime=False,
+                auto_analyze_with_ai=False,
+                record_full_keylog=False,
+                record_candidate_commits=True,
+                keylog_file=str(keylog_path),
+            )
+            engine = AutoLearningEngine(
+                settings,
+                db_path=db_path,
+                text_reader=FakeTextReader(["我", "我喜爱能在", "我", "我现在"]),
+                capture_delay=0,
+                async_finalize=False,
+            )
+
+            with patch("ai_ime.learning._append_learning_log"):
+                for stroke in parse_sequence("xainzai{1}{backspace*4}xianzai{space}"):
+                    engine.handle_stroke(stroke)
+
+            entries = read_keylog(keylog_path)
+            self.assertEqual([entry.event_type for entry in entries], ["commit", "commit"])
+            self.assertEqual([(entry.role, entry.pinyin, entry.committed_text) for entry in entries], [
+                ("candidate", "xainzai", "喜爱能在"),
+                ("correction", "xianzai", "现在"),
+            ])
+
+    def test_engine_can_disable_candidate_text_recording(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            settings = AppSettings(
+                auto_deploy_rime=False,
+                auto_analyze_with_ai=False,
+                record_full_keylog=False,
+                record_candidate_commits=False,
+                keylog_file=str(keylog_path),
+            )
+            engine = AutoLearningEngine(
+                settings,
+                db_path=db_path,
+                text_reader=FakeTextReader(["我", "我喜爱能在", "我", "我现在"]),
+                capture_delay=0,
+                async_finalize=False,
+            )
+
+            with patch("ai_ime.learning._append_learning_log"):
+                for stroke in parse_sequence("xainzai{1}{backspace*4}xianzai{space}"):
+                    engine.handle_stroke(stroke)
+
+            self.assertFalse(keylog_path.exists())
+
     def test_engine_skips_low_confidence_auto_fragment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "ai-ime.db"

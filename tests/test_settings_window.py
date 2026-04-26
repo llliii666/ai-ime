@@ -37,6 +37,8 @@ class SettingsWindowTests(unittest.TestCase):
             self.assertIn('id="providerTestState"', html)
             self.assertIn('id="runAnalysisNow"', html)
             self.assertIn('id="analysisNowResult"', html)
+            self.assertIn('id="record_candidate_commits"', html)
+            self.assertIn('id="delete_sent_keylog"', html)
             self.assertIn("已保存接口", html)
             self.assertIn("renderAnalysisNowResult", html)
             self.assertIn("renderSavedModelSummary", html)

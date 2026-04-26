@@ -301,6 +301,7 @@ class SettingsApi:
             "upsertedRules": result.upserted_rules,
             "keylogCount": result.keylog_count,
             "sentKeylogCount": result.sent_keylog_count,
+            "deletedKeylogBytes": result.deleted_keylog_bytes,
             "newEventCount": result.new_event_count,
             "sentEventCount": result.sent_event_count,
             "returnedRules": result.returned_rules,
@@ -396,7 +397,9 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
         auto_analyze_with_ai=_as_bool(payload.get("auto_analyze_with_ai"), False),
         auto_deploy_rime=_as_bool(payload.get("auto_deploy_rime"), True),
         record_full_keylog=_as_bool(payload.get("record_full_keylog"), True),
+        record_candidate_commits=_as_bool(payload.get("record_candidate_commits"), True),
         send_full_keylog=_as_bool(payload.get("send_full_keylog"), False),
+        delete_sent_keylog=_as_bool(payload.get("delete_sent_keylog"), True),
         start_on_login=_as_bool(payload.get("start_on_login"), False),
         provider=provider,
         provider_preset=_as_string(
@@ -569,7 +572,7 @@ def _storage_paths(settings: AppSettings, env_path: Path, db_path: Path) -> list
         _path_payload("database", "纠错数据库", db_path, "保存纠错事件和学习规则。"),
         _path_payload("keylog", "键盘日志", resolved_keylog_path(settings), "仅在开启完整日志时保存原始按键和语义提交记录。"),
         _path_payload("learningLog", "学习日志", data_dir / "learning.log", "记录自动学习、跳过原因和 AI 分析结果。"),
-        _path_payload("scheduler", "AI 分析状态", data_dir / SCHEDULER_STATE_FILE, "记录上次分析位置；已上传日志不会自动删除，只用 offset 避免重复发送。"),
+        _path_payload("scheduler", "AI 分析状态", data_dir / SCHEDULER_STATE_FILE, "记录上次分析位置；开启日志清理时成功分析后会删除已处理日志前缀。"),
         _path_payload("webview", "WebView 缓存", data_dir / "webview", "设置窗口的本地 WebView 存储目录。"),
     ]
     if settings.rime_dir:

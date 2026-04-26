@@ -13,7 +13,7 @@ from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.correction.rules import event_supports_rule
 from ai_ime.db import connect, init_db, list_events, upsert_rules
 from ai_ime.learning import _append_learning_log, _build_provider
-from ai_ime.listener import KeyLogEntry
+from ai_ime.listener import KeyLogEntry, keylog_file_lock
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers import ProviderError
 from ai_ime.settings import AppSettings, resolved_keylog_path
@@ -45,6 +45,7 @@ class AnalysisRunResult:
     rejected_rules: int = 0
     sent_keylog_count: int = 0
     sent_event_count: int = 0
+    deleted_keylog_bytes: int = 0
     rules: tuple[LearnedRule, ...] = ()
     rejected_rule_items: tuple[LearnedRule, ...] = ()
 
@@ -100,7 +101,7 @@ class AdaptiveAnalysisScheduler:
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, 0, 0, next_interval, "No new typing activity")
 
-        keylog_payload = keylog_entries if should_send_keylog_entries(self.settings) else []
+        keylog_payload = keylog_payload_for_settings(self.settings, keylog_entries)
         if not events and not keylog_payload:
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, len(keylog_entries), 0, next_interval, "No correction events to analyze")
@@ -122,9 +123,15 @@ class AdaptiveAnalysisScheduler:
             init_db(conn)
             upserted = upsert_rules(conn, accepted_rules)
         max_event_id = max((event.id or 0 for event in events), default=state.last_analyzed_event_id)
+        saved_keylog_offset = next_offset
+        deleted_keylog_bytes = 0
+        if self.settings.delete_sent_keylog and next_offset > 0:
+            deleted_keylog_bytes = delete_keylog_prefix(resolved_keylog_path(self.settings), next_offset)
+            if deleted_keylog_bytes:
+                saved_keylog_offset = 0
         save_scheduler_state(
             AnalysisSchedulerState(
-                last_keylog_offset=next_offset,
+                last_keylog_offset=saved_keylog_offset,
                 last_analyzed_event_id=max_event_id,
                 next_interval_seconds=next_interval,
                 last_run_at=time.time(),
@@ -134,7 +141,7 @@ class AdaptiveAnalysisScheduler:
         _append_learning_log(
             "scheduled AI analysis "
             f"events={len(new_events)} keylogs={len(keylog_payload)}/{len(keylog_entries)} "
-            f"rules={upserted} rejected={rejected} next={next_interval}s"
+            f"rules={upserted} rejected={rejected} deleted_keylog_bytes={deleted_keylog_bytes} next={next_interval}s"
         )
         message = "AI analysis completed"
         if rejected:
@@ -150,6 +157,7 @@ class AdaptiveAnalysisScheduler:
             rejected_rules=rejected,
             sent_keylog_count=len(keylog_payload),
             sent_event_count=len(events),
+            deleted_keylog_bytes=deleted_keylog_bytes,
             rules=tuple(accepted_rules),
             rejected_rule_items=tuple(rejected_rule_items),
         )
@@ -165,6 +173,14 @@ class AdaptiveAnalysisScheduler:
 
 def should_send_keylog_entries(settings: AppSettings) -> bool:
     return settings.provider == "ollama" or settings.send_full_keylog
+
+
+def keylog_payload_for_settings(settings: AppSettings, entries: list[KeyLogEntry]) -> list[KeyLogEntry]:
+    if should_send_keylog_entries(settings):
+        return entries
+    if settings.record_candidate_commits:
+        return [entry for entry in entries if entry.event_type == "commit"]
+    return []
 
 
 def filter_rules_by_evidence(
@@ -256,25 +272,43 @@ def choose_next_interval(activity_count: int, current_interval: int = DEFAULT_IN
 def read_keylog_entries_since(path: Path, offset: int, limit: int = MAX_KEYLOG_BATCH_ENTRIES) -> tuple[list[KeyLogEntry], int]:
     if not path.exists():
         return [], 0
-    size = path.stat().st_size
-    if offset < 0 or offset > size:
-        offset = 0
     entries: list[KeyLogEntry] = []
-    with path.open("rb") as handle:
-        handle.seek(offset)
-        for raw_line in handle:
-            if len(entries) >= limit:
-                break
-            line = raw_line.decode("utf-8", errors="replace").strip()
-            if not line:
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            entries.append(_keylog_entry_from_payload(payload))
-        next_offset = handle.tell()
+    with keylog_file_lock(path):
+        size = path.stat().st_size
+        if offset < 0 or offset > size:
+            offset = 0
+        with path.open("rb") as handle:
+            handle.seek(offset)
+            for raw_line in handle:
+                if len(entries) >= limit:
+                    break
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                entries.append(_keylog_entry_from_payload(payload))
+            next_offset = handle.tell()
     return entries, next_offset
+
+
+def delete_keylog_prefix(path: Path, offset: int) -> int:
+    if offset <= 0 or not path.exists():
+        return 0
+    with keylog_file_lock(path):
+        size = path.stat().st_size
+        if offset >= size:
+            path.write_text("", encoding="utf-8", newline="\n")
+            return size
+        with path.open("rb+") as handle:
+            handle.seek(offset)
+            remaining = handle.read()
+            handle.seek(0)
+            handle.write(remaining)
+            handle.truncate()
+        return offset
 
 
 def load_scheduler_state(path: Path | None = None) -> AnalysisSchedulerState:

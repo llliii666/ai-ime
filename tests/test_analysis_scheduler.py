@@ -8,6 +8,8 @@ from ai_ime.analysis_scheduler import (
     AdaptiveAnalysisScheduler,
     AnalysisSchedulerState,
     choose_next_interval,
+    delete_keylog_prefix,
+    keylog_payload_for_settings,
     load_scheduler_state,
     read_keylog_entries_since,
     should_send_keylog_entries,
@@ -51,6 +53,27 @@ class AnalysisSchedulerTests(unittest.TestCase):
         self.assertTrue(should_send_keylog_entries(AppSettings(provider="ollama", send_full_keylog=False)))
         self.assertTrue(should_send_keylog_entries(AppSettings(provider="openai-compatible", send_full_keylog=True)))
         self.assertFalse(should_send_keylog_entries(AppSettings(provider="openai-compatible", send_full_keylog=False)))
+
+    def test_keylog_payload_can_send_semantic_commits_without_raw_keys(self) -> None:
+        entries = [
+            KeyLogEntry(timestamp=1.0, event_type="down", name="x"),
+            KeyLogEntry(
+                timestamp=2.0,
+                event_type="commit",
+                name="xianzai",
+                pinyin="xianzai",
+                committed_text="现在",
+                role="correction",
+            ),
+        ]
+
+        payload = keylog_payload_for_settings(
+            AppSettings(provider="openai-compatible", send_full_keylog=False, record_candidate_commits=True),
+            entries,
+        )
+
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0].event_type, "commit")
 
     def test_read_keylog_entries_since_offset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -107,7 +130,22 @@ class AnalysisSchedulerTests(unittest.TestCase):
             self.assertEqual(result.sent_event_count, 1)
             self.assertEqual(result.sent_keylog_count, 1)
             self.assertEqual(state.last_analyzed_event_id, 1)
-            self.assertGreater(state.last_keylog_offset, 0)
+            self.assertEqual(state.last_keylog_offset, 0)
+            self.assertEqual(keylog_path.read_text(encoding="utf-8"), "")
+
+    def test_delete_keylog_prefix_preserves_unsent_tail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "keylog.jsonl"
+            writer = KeyLogWriter(path)
+            writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="x"))
+            offset = path.stat().st_size
+            writer.write(KeyLogEntry(timestamp=2.0, event_type="down", name="y"))
+
+            deleted = delete_keylog_prefix(path, offset)
+            entries = read_keylog_entries_since(path, 0)[0]
+
+            self.assertEqual(deleted, offset)
+            self.assertEqual([entry.name for entry in entries], ["y"])
 
     def test_run_once_rejects_provider_rules_without_supported_evidence(self) -> None:
         class MixedProvider:

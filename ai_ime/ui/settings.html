@@ -174,6 +174,14 @@
             </label>
             <label class="switch-row">
               <span>
+                <strong>记录并发送候选词上屏内容</strong>
+                <button class="help-tip" type="button" data-help="开启后会尝试读取按空格、回车或数字选词后真正上屏的中文，并记录为 candidate/correction 语义日志。云端模型也会收到这些语义日志，但不会因此收到完整原始按键。">?</button>
+                <small>用于让模型看到“错误拼音、错误候选、正确拼音、正确候选”的证据链。</small>
+              </span>
+              <input id="record_candidate_commits" type="checkbox" />
+            </label>
+            <label class="switch-row">
+              <span>
                 <strong>允许云端/中转模型接收完整键入日志</strong>
                 <button class="help-tip" type="button" data-help="开启后 OpenAI 兼容接口和中转站也能收到完整键盘日志。涉及隐私，默认关闭。">?</button>
                 <small>本地模型不受该开关限制，云端模型默认不发送完整日志。</small>
@@ -182,8 +190,16 @@
             </label>
             <label class="switch-row">
               <span>
+                <strong>分析成功后删除已处理键入日志</strong>
+                <button class="help-tip" type="button" data-help="开启后，模型分析成功并更新读取位置后，会从 keylog.jsonl 中移除已经处理过的日志前缀；模型失败时不会删除，避免丢失待分析数据。">?</button>
+                <small>减少本地原始日志长期保留；纠错事件和规则仍保存在数据库中。</small>
+              </span>
+              <input id="delete_sent_keylog" type="checkbox" />
+            </label>
+            <label class="switch-row">
+              <span>
                 <strong>自动调用模型分析纠错事件</strong>
-                <button class="help-tip" type="button" data-help="后台按自适应间隔批量发送纠错事件。日志不会自动删除，只记录读取位置避免重复发送。">?</button>
+                <button class="help-tip" type="button" data-help="后台按自适应间隔批量发送纠错事件。开启日志清理时，分析成功后会移除已处理 keylog 前缀；失败时不会删除。">?</button>
                 <small>开启后后台按自适应间隔批量发送；云端默认不带完整键盘日志。</small>
               </span>
               <input id="auto_analyze_with_ai" type="checkbox" />
@@ -354,7 +370,7 @@
           </div>
           <div class="notice subdued">
             <strong>日志保留</strong>
-            <span>发送给模型后的键盘日志不会自动删除；AI IME 会在分析状态文件中记录读取位置，下次只读取新增日志。需要清理时可打开文件位置后手动删除或清空。</span>
+            <span>开启“分析成功后删除已处理键入日志”时，AI IME 会在模型分析成功后移除已处理 keylog 前缀；纠错事件、规则和学习日志仍会保留在本地文件中。</span>
           </div>
         </section>
 
