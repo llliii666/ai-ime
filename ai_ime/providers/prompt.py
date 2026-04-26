@@ -7,7 +7,7 @@ from ai_ime.models import CorrectionEvent
 
 
 SYSTEM_PROMPT = """You analyze Chinese pinyin typo correction events.
-Return only JSON. Do not include markdown.
+Return only one JSON object. Do not include markdown or natural-language prose.
 Your output must match this shape:
 {
   "rules": [
@@ -26,6 +26,8 @@ Your output must match this shape:
 Only recommend rules supported by the events. Use confidence from 0.0 to 1.0.
 Use higher weight for more confident and repeated rules.
 Keyboard logs are optional context only. Do not invent a rule from keyboard logs alone.
+If the evidence is insufficient, return {"rules": []}.
+Do not copy raw keyboard-log fragments into explanations.
 """
 
 

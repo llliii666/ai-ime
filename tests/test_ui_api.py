@@ -5,7 +5,8 @@ from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ime.db import connect, init_db, list_events, list_rules
+from ai_ime.db import connect, init_db, insert_event, list_events, list_rules, upsert_rules
+from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.ui_api import SettingsApi, _settings_from_payload, _settings_payload
 
 
@@ -105,6 +106,56 @@ class SettingsApiTests(unittest.TestCase):
                 self.assertTrue(response["ok"])
                 self.assertEqual(events[0].source, "manual-ui")
                 self.assertEqual(rules[0].committed_text, "现在")
+        finally:
+            if old_local_app_data is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = old_local_app_data
+
+    def test_list_correction_records_returns_sorted_triples_and_enabled_rules(self) -> None:
+        old_local_app_data = os.environ.get("LOCALAPPDATA")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["LOCALAPPDATA"] = str(Path(tmp) / "LocalAppData")
+                db_path = Path(tmp) / "ai-ime.db"
+                api = SettingsApi(env_path=Path(tmp) / ".env", db_path=db_path)
+
+                with closing(connect(db_path)) as conn:
+                    init_db(conn)
+                    insert_event(conn, CorrectionEvent("zuihou", "zuihou", "最后", source="manual"))
+                    insert_event(conn, CorrectionEvent("anli", "anli", "案例", source="manual"))
+                    upsert_rules(
+                        conn,
+                        [
+                            LearnedRule("zuihou", "zuihou", "最后", 0.9, 150000, 2, "manual", enabled=False),
+                            LearnedRule("anli", "anli", "案例", 0.95, 151000, 3, "manual", enabled=True),
+                        ],
+                    )
+
+                response = api.list_correction_records("pinyin")
+
+                self.assertTrue(response["ok"])
+                self.assertEqual([event["wrongPinyin"] for event in response["events"]], ["anli", "zuihou"])
+                self.assertEqual(len(response["rules"]), 1)
+                self.assertEqual(response["rules"][0]["committedText"], "案例")
+        finally:
+            if old_local_app_data is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = old_local_app_data
+
+    def test_load_state_exposes_provider_presets(self) -> None:
+        old_local_app_data = os.environ.get("LOCALAPPDATA")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["LOCALAPPDATA"] = str(Path(tmp) / "LocalAppData")
+                api = SettingsApi(env_path=Path(tmp) / ".env", db_path=Path(tmp) / "ai-ime.db")
+
+                state = api.load_state()
+
+                preset_ids = {preset["id"] for preset in state["meta"]["providerPresets"]}
+                self.assertIn("openai", preset_ids)
+                self.assertIn("ollama", preset_ids)
         finally:
             if old_local_app_data is None:
                 os.environ.pop("LOCALAPPDATA", None)

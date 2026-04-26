@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from contextlib import closing
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -11,8 +12,9 @@ from ai_ime.config import default_db_path, load_env_file
 from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.db import connect, init_db, list_events, list_rules
 from ai_ime.learning import AutoLearningEngine
-from ai_ime.models import CorrectionEvent
+from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
+from ai_ime.providers.presets import provider_presets_payload
 from ai_ime.rime.deploy import deploy_rime_files
 from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
 from ai_ime.settings import AppSettings, default_settings_path, env_api_key, load_app_settings, save_app_settings, write_provider_env
@@ -41,8 +43,24 @@ class SettingsApi:
                 "learningLogPath": str(default_data_dir() / "learning.log"),
                 "apiKeySaved": bool(env_api_key(settings)),
                 "apiKeyMask": _mask_secret(env_api_key(settings)),
+                "providerPresets": provider_presets_payload(),
                 **self._database_stats(),
             },
+        }
+
+    def list_correction_records(self, sort: str = "time_desc") -> dict[str, Any]:
+        try:
+            with closing(connect(self.db_path)) as conn:
+                init_db(conn)
+                events = _sort_events(list_events(conn), sort)
+                rules = _sort_rules(list_rules(conn, enabled_only=True), sort)
+        except Exception as exc:
+            return _error(f"读取纠错记录失败：{exc}")
+        return {
+            "ok": True,
+            "sort": _normalize_record_sort(sort),
+            "events": [_event_payload(event) for event in events],
+            "rules": [_rule_payload(rule) for rule in rules],
         }
 
     def save_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -302,6 +320,60 @@ def _mask_secret(value: str) -> str:
     if len(value) <= 8:
         return "****"
     return f"{value[:4]}...{value[-4:]}"
+
+
+def _sort_events(events: list[CorrectionEvent], sort: str) -> list[CorrectionEvent]:
+    normalized = _normalize_record_sort(sort)
+    if normalized == "pinyin":
+        return sorted(events, key=lambda item: _triple_sort_key(item.wrong_pinyin, item.correct_pinyin, item.committed_text))
+    reverse = normalized == "time_desc"
+    return sorted(events, key=lambda item: (item.created_at or "", item.id or 0), reverse=reverse)
+
+
+def _sort_rules(rules: list[LearnedRule], sort: str) -> list[LearnedRule]:
+    normalized = _normalize_record_sort(sort)
+    if normalized == "pinyin":
+        return sorted(rules, key=lambda item: _triple_sort_key(item.wrong_pinyin, item.correct_pinyin, item.committed_text))
+    reverse = normalized == "time_desc"
+    return sorted(rules, key=lambda item: (item.last_seen_at or "", item.id or 0), reverse=reverse)
+
+
+def _normalize_record_sort(value: str) -> str:
+    if value in {"time_desc", "time_asc", "pinyin"}:
+        return value
+    return "time_desc"
+
+
+def _triple_sort_key(wrong_pinyin: str, correct_pinyin: str, committed_text: str) -> tuple[str, str, str]:
+    return (wrong_pinyin.lower(), correct_pinyin.lower(), committed_text)
+
+
+def _event_payload(event: CorrectionEvent) -> dict[str, Any]:
+    return {
+        "id": event.id,
+        "wrongPinyin": event.wrong_pinyin,
+        "correctPinyin": event.correct_pinyin,
+        "committedText": event.committed_text,
+        "commitKey": event.commit_key,
+        "source": event.source,
+        "createdAt": event.created_at,
+    }
+
+
+def _rule_payload(rule: LearnedRule) -> dict[str, Any]:
+    return {
+        "id": rule.id,
+        "wrongPinyin": rule.wrong_pinyin,
+        "correctPinyin": rule.correct_pinyin,
+        "committedText": rule.committed_text,
+        "confidence": rule.confidence,
+        "weight": rule.weight,
+        "count": rule.count,
+        "provider": rule.provider,
+        "mistakeType": rule.mistake_type,
+        "explanation": rule.explanation,
+        "lastSeenAt": rule.last_seen_at,
+    }
 
 
 def _error(message: str) -> dict[str, Any]:

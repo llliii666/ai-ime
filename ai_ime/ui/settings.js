@@ -26,6 +26,8 @@ const providerLabels = {
 
 let lastState = null;
 let bridgeReady = false;
+let providerPresets = [];
+let activeRecordKind = "rules";
 
 window.addEventListener("pywebviewready", () => {
   handleBridgeReady();
@@ -58,6 +60,15 @@ function bindUi() {
   document.getElementById("addManualCorrection").addEventListener("click", addManualCorrection);
   document.getElementById("openKeylogFile").addEventListener("click", () => openRecordFile("keylog"));
   document.getElementById("openLearningLog").addEventListener("click", () => openRecordFile("learning"));
+  document.querySelectorAll("[data-record-kind]").forEach((button) => {
+    button.addEventListener("click", () => openRecords(button.dataset.recordKind));
+  });
+  document.querySelectorAll("[data-record-tab]").forEach((button) => {
+    button.addEventListener("click", () => setRecordKind(button.dataset.recordTab, true));
+  });
+  document.getElementById("recordSort").addEventListener("change", loadRecords);
+  document.getElementById("refreshRecords").addEventListener("click", loadRecords);
+  document.getElementById("provider_preset").addEventListener("change", applyProviderPreset);
   document.getElementById("provider").addEventListener("change", syncTopbar);
   document.getElementById("listener_enabled").addEventListener("change", syncTopbar);
   syncActionState();
@@ -76,7 +87,11 @@ async function loadState() {
   lastState = response;
   fillForm(response.settings);
   renderMeta(response.meta);
+  populateProviderPresets(response.meta.providerPresets || []);
   syncTopbar();
+  if (document.getElementById("records").classList.contains("active")) {
+    await loadRecords();
+  }
   setStatus("配置已读取", "ok");
 }
 
@@ -162,6 +177,7 @@ async function addManualCorrection() {
   document.getElementById("manualCommittedText").value = "";
   setStatus(response.message || "纠错已记录", "ok");
   await loadState();
+  await openRecords("rules");
 }
 
 async function openRimeDir() {
@@ -185,6 +201,37 @@ async function openRecordFile(kind) {
   }
 }
 
+async function openRecords(kind = "rules") {
+  await setRecordKind(kind, false);
+  showPage("records", true);
+  await loadRecords();
+}
+
+async function setRecordKind(kind = "rules", shouldLoad = true) {
+  activeRecordKind = kind === "events" ? "events" : "rules";
+  document.querySelectorAll("[data-record-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.recordTab === activeRecordKind);
+  });
+  if (shouldLoad) {
+    await loadRecords();
+  }
+}
+
+async function loadRecords() {
+  if (!apiReady()) {
+    return;
+  }
+  const sort = document.getElementById("recordSort").value;
+  setStatus("正在读取纠错记录");
+  const response = await window.pywebview.api.list_correction_records(sort);
+  if (!response.ok) {
+    setStatus(response.message || "读取纠错记录失败", "error");
+    return;
+  }
+  renderRecords(activeRecordKind === "events" ? response.events : response.rules);
+  setStatus("纠错记录已读取", "ok");
+}
+
 async function browsePath(kind, targetId) {
   if (!apiReady()) {
     return;
@@ -197,7 +244,7 @@ async function browsePath(kind, targetId) {
   }
 }
 
-function showPage(pageId) {
+function showPage(pageId, skipRecordLoad = false) {
   document.querySelectorAll(".page").forEach((page) => {
     page.classList.toggle("active", page.id === pageId);
   });
@@ -206,6 +253,9 @@ function showPage(pageId) {
   });
   const page = document.getElementById(pageId);
   document.getElementById("pageTitle").textContent = page.dataset.title || "设置";
+  if (pageId === "records" && !skipRecordLoad) {
+    loadRecords();
+  }
 }
 
 function fillForm(settings) {
@@ -243,11 +293,144 @@ function renderMeta(meta) {
   document.getElementById("apiKeyState").textContent = meta.apiKeySaved ? `已保存 ${meta.apiKeyMask}` : "未保存密钥";
 }
 
+function populateProviderPresets(presets) {
+  providerPresets = Array.isArray(presets) ? presets : [];
+  const select = document.getElementById("provider_preset");
+  const current = select.value || "custom";
+  select.innerHTML = "";
+  select.appendChild(new Option("自定义", "custom"));
+  providerPresets.forEach((preset) => {
+    const option = new Option(preset.label, preset.id);
+    option.title = preset.description || "";
+    select.appendChild(option);
+  });
+  select.value = detectProviderPreset() || current;
+  if (!select.value) {
+    select.value = "custom";
+  }
+}
+
+function applyProviderPreset() {
+  const presetId = document.getElementById("provider_preset").value;
+  if (!presetId || presetId === "custom") {
+    return;
+  }
+  const preset = providerPresets.find((item) => item.id === presetId);
+  if (!preset) {
+    return;
+  }
+  document.getElementById("provider").value = preset.provider;
+  if (preset.provider === "ollama") {
+    document.getElementById("ollama_base_url").value = preset.base_url || "http://localhost:11434";
+    document.getElementById("ollama_model").value = preset.model || "";
+  } else if (preset.provider === "openai-compatible") {
+    document.getElementById("openai_base_url").value = preset.base_url || "";
+    document.getElementById("openai_model").value = preset.model || "";
+  }
+  syncTopbar();
+  setStatus(`已应用接口预设：${preset.label}`, "ok");
+}
+
+function detectProviderPreset() {
+  const provider = document.getElementById("provider").value;
+  const openaiBase = document.getElementById("openai_base_url").value.trim();
+  const openaiModel = document.getElementById("openai_model").value.trim();
+  const ollamaBase = document.getElementById("ollama_base_url").value.trim();
+  const ollamaModel = document.getElementById("ollama_model").value.trim();
+  const matched = providerPresets.find((preset) => {
+    if (preset.provider !== provider) {
+      return false;
+    }
+    if (provider === "openai-compatible") {
+      return preset.base_url === openaiBase && preset.model === openaiModel;
+    }
+    if (provider === "ollama") {
+      return preset.base_url === ollamaBase && preset.model === ollamaModel;
+    }
+    return provider === "mock";
+  });
+  return matched ? matched.id : "custom";
+}
+
+function renderRecords(records) {
+  const list = document.getElementById("recordList");
+  const empty = document.getElementById("recordEmpty");
+  list.replaceChildren();
+  const items = Array.isArray(records) ? records : [];
+  empty.classList.toggle("active", items.length === 0);
+  items.forEach((record, index) => {
+    const row = document.createElement("div");
+    row.className = "record-row";
+    row.style.setProperty("--i", String(Math.min(index, 12)));
+    row.appendChild(renderRecordTriple(record));
+    row.appendChild(renderRecordMeta(record));
+    list.appendChild(row);
+  });
+}
+
+function renderRecordTriple(record) {
+  const triple = document.createElement("div");
+  triple.className = "record-triple";
+  triple.appendChild(recordToken(record.wrongPinyin || "", "record-code"));
+  triple.appendChild(recordArrow());
+  triple.appendChild(recordToken(record.correctPinyin || "", "record-code"));
+  triple.appendChild(recordArrow());
+  triple.appendChild(recordToken(record.committedText || "", "record-text"));
+  return triple;
+}
+
+function renderRecordMeta(record) {
+  const meta = document.createElement("div");
+  meta.className = "record-meta";
+  if (activeRecordKind === "rules") {
+    const confidence = Number(record.confidence || 0);
+    meta.appendChild(recordMetaLine(`规则 #${record.id ?? "-"}`, `${record.provider || "rule"} · ${record.count || 0} 次 · ${(confidence * 100).toFixed(0)}%`));
+    meta.appendChild(recordSmall(record.lastSeenAt || ""));
+  } else {
+    meta.appendChild(recordMetaLine(`事件 #${record.id ?? "-"}`, `${record.source || "unknown"} · ${record.commitKey || "unknown"}`));
+    meta.appendChild(recordSmall(record.createdAt || ""));
+  }
+  return meta;
+}
+
+function recordToken(text, className) {
+  const token = document.createElement("span");
+  token.className = className;
+  token.textContent = text || "-";
+  return token;
+}
+
+function recordArrow() {
+  const arrow = document.createElement("span");
+  arrow.className = "record-arrow";
+  arrow.textContent = "→";
+  return arrow;
+}
+
+function recordMetaLine(title, detail) {
+  const wrapper = document.createElement("div");
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  wrapper.appendChild(strong);
+  wrapper.appendChild(document.createTextNode(` ${detail}`));
+  return wrapper;
+}
+
+function recordSmall(text) {
+  const small = document.createElement("span");
+  small.textContent = text || "";
+  return small;
+}
+
 function syncTopbar() {
   const listener = document.getElementById("listener_enabled").checked;
   const provider = document.getElementById("provider").value;
   document.getElementById("listenerPill").textContent = listener ? "监听中" : "已暂停";
   document.getElementById("providerPill").textContent = providerLabels[provider] || provider;
+  const preset = document.getElementById("provider_preset");
+  if (preset) {
+    preset.value = detectProviderPreset();
+  }
 }
 
 function setStatus(message, type = "") {
@@ -279,6 +462,7 @@ function applyInitialState() {
     lastState = state;
     fillForm(state.settings);
     renderMeta(state.meta);
+    populateProviderPresets(state.meta.providerPresets || []);
     syncTopbar();
     setStatus("配置已预载，正在连接本地后端");
   } catch {
@@ -288,7 +472,7 @@ function applyInitialState() {
 
 function syncActionState() {
   const pending = !bridgeReady && !(window.pywebview && window.pywebview.api);
-  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, #addManualCorrection, #openKeylogFile, #openLearningLog, [data-browse]").forEach((button) => {
+  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, #addManualCorrection, #openKeylogFile, #openLearningLog, #refreshRecords, [data-browse], [data-record-kind], [data-record-tab]").forEach((button) => {
     button.disabled = pending;
     button.classList.toggle("is-pending", pending);
   });

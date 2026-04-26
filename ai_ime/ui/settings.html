@@ -19,6 +19,7 @@
         <nav class="nav-list">
           <button class="nav-item active" data-page="general">常规</button>
           <button class="nav-item" data-page="correction">纠错</button>
+          <button class="nav-item" data-page="records">记录</button>
           <button class="nav-item" data-page="privacy">隐私</button>
           <button class="nav-item" data-page="model">模型</button>
           <button class="nav-item" data-page="rime">输入法</button>
@@ -46,14 +47,17 @@
             <div class="metric">
               <span>纠错事件</span>
               <strong id="eventsCount">0</strong>
+              <button class="metric-action" data-record-kind="events">查看事件</button>
             </div>
             <div class="metric">
               <span>启用规则</span>
               <strong id="enabledRulesCount">0</strong>
+              <button class="metric-action" data-record-kind="rules">查看规则</button>
             </div>
             <div class="metric">
               <span>规则总数</span>
               <strong id="rulesCount">0</strong>
+              <button class="metric-action" data-record-kind="rules">查看明细</button>
             </div>
           </div>
 
@@ -125,6 +129,31 @@
           </div>
         </section>
 
+        <section class="page" id="records" data-title="记录">
+          <div class="panel record-panel">
+            <div class="panel-heading record-heading">
+              <div>
+                <h2>纠错记录</h2>
+                <span>用三元组查看本地事件和当前启用规则</span>
+              </div>
+              <div class="record-tools">
+                <div class="segmented" aria-label="记录类型">
+                  <button class="segment active" data-record-tab="rules">启用规则</button>
+                  <button class="segment" data-record-tab="events">纠错事件</button>
+                </div>
+                <select id="recordSort" aria-label="排序方式">
+                  <option value="time_desc">时间：最新优先</option>
+                  <option value="time_asc">时间：最早优先</option>
+                  <option value="pinyin">拼音：A-Z</option>
+                </select>
+                <button class="secondary compact-button" id="refreshRecords">刷新</button>
+              </div>
+            </div>
+            <div class="record-list" id="recordList"></div>
+            <div class="empty-state" id="recordEmpty">还没有记录。可以先手动添加一条纠错，或在记事本中完成一次自动纠错。</div>
+          </div>
+        </section>
+
         <section class="page" id="privacy" data-title="隐私">
           <div class="panel">
             <div class="panel-heading">
@@ -173,6 +202,12 @@
                 <option value="mock">本地模拟</option>
               </select>
             </div>
+            <div class="field-row">
+              <label for="provider_preset">接口预设</label>
+              <select id="provider_preset">
+                <option value="custom">自定义</option>
+              </select>
+            </div>
           </div>
 
           <div class="split-panels">
@@ -210,6 +245,10 @@
               </div>
               <button class="secondary inline-action" id="testProvider">测试模型连接</button>
             </div>
+          </div>
+          <div class="notice">
+            <strong>结构化分析</strong>
+            <span>AI IME 会把纠错事件和可选键盘日志整理成 JSON，并用系统提示词要求模型只返回规则 JSON；OpenAI 兼容接口会启用 JSON mode，Ollama 会启用 format=json，返回后还会经过本地 schema 校验。</span>
           </div>
         </section>
 

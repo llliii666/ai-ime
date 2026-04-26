@@ -56,6 +56,7 @@ uv run python run.py --stop
 打开托盘图标的设置窗口，在“模型”页面选择：
 
 - `OpenAI 兼容接口`：可填写中转站 Base URL、模型名和 API Key。
+- `接口预设`：可快速填入 OpenAI、OpenRouter、DeepSeek、Moonshot、SiliconFlow、智谱、Groq、LM Studio 等常见 OpenAI 兼容接口。
 - `Ollama`：填写本地 Ollama 地址和模型名。
 - `本地模拟`：只用于开发和测试。
 
@@ -86,6 +87,8 @@ xianzai
 uv run python -m ai_ime list-events
 uv run python -m ai_ime list-rules
 ```
+
+也可以在设置中心“记录”页面查看三元组明细，并按时间或拼音排序。
 
 ## 6. 部署到小狼毫
 
