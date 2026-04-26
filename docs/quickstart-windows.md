@@ -55,9 +55,9 @@ uv run python run.py --stop
 
 打开托盘图标的设置窗口，在“模型”页面选择：
 
-- `OpenAI 兼容接口`：可填写中转站 Base URL、模型名和 API Key。
-- `接口预设`：可快速填入 OpenAI、OpenRouter、DeepSeek、Moonshot、SiliconFlow、智谱、Groq、LM Studio 等常见 OpenAI 兼容接口。
-- `Ollama`：填写本地 Ollama 地址和模型名。
+- `接口类型`：默认 OpenAI 兼容，也可切到 Ollama 本地或本地模拟。
+- `提供商`：可快速填入 OpenAI、OpenRouter、DeepSeek、Moonshot、SiliconFlow、智谱、Groq、LM Studio 等常见接口；自定义中转商会留空 Base URL，按提示填写。
+- `测试连接并获取模型`：连接成功后会显示模型下拉菜单；失败时会显示红色错误原因。
 - `本地模拟`：只用于开发和测试。
 
 云端/中转模型默认不会收到完整键盘日志，除非在“隐私”页面开启。

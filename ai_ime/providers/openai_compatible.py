@@ -5,7 +5,7 @@ import os
 from ai_ime.listener import KeyLogEntry
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers.base import AIProvider, ProviderError
-from ai_ime.providers.http import post_json
+from ai_ime.providers.http import get_json, post_json
 from ai_ime.providers.prompt import SYSTEM_PROMPT, build_user_prompt
 from ai_ime.providers.schema import parse_rules_json
 
@@ -32,10 +32,6 @@ class OpenAICompatibleProvider(AIProvider):
     ) -> list[LearnedRule]:
         if not self.model:
             raise ProviderError("OpenAI-compatible provider requires a model.")
-        headers = {}
-        api_key = os.environ.get(self.api_key_env)
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
         payload = {
             "model": self.model,
             "messages": [
@@ -49,11 +45,32 @@ class OpenAICompatibleProvider(AIProvider):
         response = post_json(
             f"{self.base_url}/chat/completions",
             payload=payload,
-            headers=headers,
+            headers=self._headers(),
             timeout=self.timeout,
         )
         content = _extract_chat_content(response)
         return parse_rules_json(content, provider="openai-compatible")
+
+    def list_models(self) -> list[str]:
+        response = get_json(f"{self.base_url}/models", headers=self._headers(), timeout=self.timeout)
+        data = response.get("data")
+        if not isinstance(data, list):
+            raise ProviderError("Provider models response missing data array.")
+        models: list[str] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            model_id = item.get("id")
+            if isinstance(model_id, str) and model_id.strip():
+                models.append(model_id.strip())
+        return sorted(set(models), key=str.lower)
+
+    def _headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        api_key = os.environ.get(self.api_key_env)
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        return headers
 
 
 def _extract_chat_content(response: dict[str, object]) -> str:

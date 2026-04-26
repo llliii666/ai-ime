@@ -3,7 +3,7 @@ from __future__ import annotations
 from ai_ime.listener import KeyLogEntry
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers.base import AIProvider, ProviderError
-from ai_ime.providers.http import post_json
+from ai_ime.providers.http import get_json, post_json
 from ai_ime.providers.prompt import SYSTEM_PROMPT, build_user_prompt
 from ai_ime.providers.schema import parse_rules_json
 
@@ -38,3 +38,17 @@ class OllamaProvider(AIProvider):
         if not isinstance(content, str):
             raise ProviderError("Ollama message content must be a string.")
         return parse_rules_json(content, provider="ollama")
+
+    def list_models(self) -> list[str]:
+        response = get_json(f"{self.base_url}/api/tags", timeout=self.timeout)
+        data = response.get("models")
+        if not isinstance(data, list):
+            raise ProviderError("Ollama models response missing models array.")
+        models: list[str] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name") or item.get("model")
+            if isinstance(name, str) and name.strip():
+                models.append(name.strip())
+        return sorted(set(models), key=str.lower)

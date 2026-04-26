@@ -162,6 +162,29 @@ class SettingsApiTests(unittest.TestCase):
             else:
                 os.environ["LOCALAPPDATA"] = old_local_app_data
 
+    def test_test_provider_returns_model_list(self) -> None:
+        class FakeProvider:
+            def list_models(self) -> list[str]:
+                return ["alpha", "beta"]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            api = SettingsApi(env_path=Path(tmp) / ".env", db_path=Path(tmp) / "ai-ime.db")
+
+            with patch("ai_ime.ui_api._build_provider", return_value=FakeProvider()):
+                response = api.test_provider(
+                    {
+                        "settings": {
+                            "provider": "openai-compatible",
+                            "openai_base_url": "http://relay.test/v1",
+                            "openai_model": "",
+                            "keylog_file": str(Path(tmp) / "keylog.jsonl"),
+                        }
+                    }
+                )
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["models"], ["alpha", "beta"])
+
 
 if __name__ == "__main__":
     unittest.main()

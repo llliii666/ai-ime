@@ -377,6 +377,23 @@ input[type="checkbox"]:checked::after {
   font-size: 13px;
 }
 
+.field-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.field-stack label {
+  color: #344054;
+  font-size: 13px;
+}
+
+.flow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
 input[type="text"],
 input[type="password"],
 select {
@@ -450,6 +467,61 @@ select:focus {
 
 .inline-action {
   margin-top: 16px;
+}
+
+.model-flow {
+  position: relative;
+}
+
+.dynamic-provider {
+  display: none;
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.dynamic-provider.active {
+  display: block;
+  animation: pageIn 180ms ease forwards;
+}
+
+.input-with-state {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.input-with-state span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.model-actions {
+  align-items: center;
+}
+
+.connection-state {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.connection-state.ok {
+  color: var(--green);
+}
+
+.connection-state.error {
+  color: #b42318;
+}
+
+.connection-state.testing {
+  color: var(--amber);
+}
+
+.model-picker {
+  margin-top: 10px;
 }
 
 .compact-button {
@@ -669,6 +741,11 @@ select:focus {
   .field-row.compact {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .flow-grid,
+  .input-with-state {
+    grid-template-columns: 1fr;
   }
 
   .record-heading {

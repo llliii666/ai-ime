@@ -33,6 +33,8 @@ class SettingsWindowTests(unittest.TestCase):
             self.assertIn('id="initial-state"', html)
             self.assertIn('id="recordList"', html)
             self.assertIn('id="provider_preset"', html)
+            self.assertIn('id="model_select"', html)
+            self.assertIn('id="providerTestState"', html)
             self.assertIn("<script>", html)
             self.assertNotIn('href="./settings.css"', html)
             self.assertNotIn('src="./settings.js"', html)

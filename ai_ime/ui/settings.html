@@ -189,63 +189,76 @@
         </section>
 
         <section class="page" id="model" data-title="模型">
-          <div class="panel">
+          <div class="panel model-flow">
             <div class="panel-heading">
-              <h2>通道</h2>
-              <span>支持中转站、OpenAI 兼容接口和本地 Ollama</span>
+              <h2>模型接口</h2>
+              <span>先选接口类型，再选提供商或中转商</span>
             </div>
-            <div class="field-row">
-              <label for="provider">当前通道</label>
-              <select id="provider">
-                <option value="openai-compatible">OpenAI 兼容接口</option>
-                <option value="ollama">Ollama 本地模型</option>
-                <option value="mock">本地模拟</option>
-              </select>
-            </div>
-            <div class="field-row">
-              <label for="provider_preset">接口预设</label>
-              <select id="provider_preset">
-                <option value="custom">自定义</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="split-panels">
-            <div class="panel">
-              <div class="panel-heading">
-                <h2>OpenAI 兼容接口</h2>
-                <span id="apiKeyState">未读取</span>
+            <div class="flow-grid">
+              <div class="field-stack">
+                <label for="provider">接口类型</label>
+                <select id="provider">
+                  <option value="openai-compatible">OpenAI 兼容</option>
+                  <option value="ollama">Ollama 本地</option>
+                  <option value="mock">本地模拟</option>
+                </select>
               </div>
-              <div class="field-row">
+              <div class="field-stack">
+                <label for="provider_preset">提供商</label>
+                <select id="provider_preset">
+                  <option value="custom">自定义中转商</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="dynamic-provider active" id="openaiProviderConfig">
+              <div class="field-row compact">
                 <label for="openai_base_url">Base URL</label>
-                <input id="openai_base_url" type="text" spellcheck="false" />
+                <input id="openai_base_url" type="text" spellcheck="false" placeholder="例如：http://your-relay.example/v1" />
               </div>
-              <div class="field-row">
-                <label for="openai_model">模型</label>
-                <input id="openai_model" type="text" spellcheck="false" />
-              </div>
-              <div class="field-row">
+              <div class="field-row compact">
                 <label for="apiKey">API Key</label>
-                <input id="apiKey" type="password" placeholder="留空则继续使用已保存密钥" autocomplete="off" />
+                <div class="input-with-state">
+                  <input id="apiKey" type="password" placeholder="留空则继续使用已保存密钥" autocomplete="off" />
+                  <span id="apiKeyState">未保存密钥</span>
+                </div>
               </div>
             </div>
 
-            <div class="panel">
-              <div class="panel-heading">
-                <h2>Ollama 本地模型</h2>
-                <span>localhost</span>
-              </div>
-              <div class="field-row">
+            <div class="dynamic-provider" id="ollamaProviderConfig">
+              <div class="field-row compact">
                 <label for="ollama_base_url">Base URL</label>
-                <input id="ollama_base_url" type="text" spellcheck="false" />
+                <input id="ollama_base_url" type="text" spellcheck="false" placeholder="例如：http://localhost:11434" />
               </div>
-              <div class="field-row">
-                <label for="ollama_model">模型</label>
-                <input id="ollama_model" type="text" spellcheck="false" />
+            </div>
+
+            <div class="dynamic-provider" id="mockProviderConfig">
+              <div class="notice subdued">
+                <strong>本地模拟</strong>
+                <span>无需联网，适合开发和界面测试，不会调用真实模型。</span>
               </div>
-              <button class="secondary inline-action" id="testProvider">测试模型连接</button>
+            </div>
+
+            <div class="button-row model-actions">
+              <button class="primary" id="testProvider">测试连接并获取模型</button>
+              <span class="connection-state" id="providerTestState">等待测试</span>
+            </div>
+
+            <div class="model-picker">
+              <div class="field-row compact">
+                <label for="model_select">模型列表</label>
+                <select id="model_select" disabled>
+                  <option value="">请先测试连接</option>
+                </select>
+              </div>
+              <div class="field-row compact">
+                <label for="openai_model">手动模型名</label>
+                <input id="openai_model" type="text" spellcheck="false" placeholder="测试失败或列表为空时可手动填写" />
+              </div>
+              <input id="ollama_model" type="hidden" />
             </div>
           </div>
+
           <div class="notice">
             <strong>结构化分析</strong>
             <span>AI IME 会把纠错事件和可选键盘日志整理成 JSON，并用系统提示词要求模型只返回规则 JSON；OpenAI 兼容接口会启用 JSON mode，Ollama 会启用 format=json，返回后还会经过本地 schema 校验。</span>

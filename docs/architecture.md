@@ -41,6 +41,12 @@ AI 分析链路分三层：
 2. `OpenAICompatibleProvider` 走 `/chat/completions`，默认附带 `response_format={"type":"json_object"}`；`OllamaProvider` 走 `/api/chat`，默认附带 `format="json"`。
 3. `ai_ime/providers/schema.py` 解析、校验并归一化模型返回结果，只接受 `rules` 数组中的标准字段。
 
+模型设置页的连通性测试不会先发纠错内容，而是先拉取模型列表：
+
+- OpenAI 兼容接口：`GET {base_url}/models`。
+- Ollama：`GET {base_url}/api/tags`。
+- 本地模拟：直接返回 `mock-model`。
+
 因此模型不会直接决定数据库结构；它只能建议规则，最终写入前必须通过本地 schema。
 
 ## 可扩展点

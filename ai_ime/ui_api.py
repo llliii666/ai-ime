@@ -186,12 +186,16 @@ class SettingsApi:
             os.environ[settings.openai_api_key_env] = api_key
         try:
             provider = _build_provider(settings)
-            provider.analyze_events([])
+            models = _list_provider_models(provider)
         except ProviderError as exc:
             return _error(f"模型连接失败：{exc}")
         except Exception as exc:
             return _error(f"模型连接失败：{exc}")
-        return {"ok": True, "message": "模型接口可以正常返回。"}
+        return {
+            "ok": True,
+            "message": f"模型接口连接正常，获取到 {len(models)} 个模型。" if models else "模型接口连接正常，但没有返回模型列表。",
+            "models": models,
+        }
 
     def open_path(self, value: str) -> dict[str, Any]:
         path = Path(value)
@@ -295,6 +299,15 @@ def _build_provider(settings: AppSettings):
             timeout=15.0,
         )
     raise ProviderError(f"不支持的模型通道：{settings.provider}")
+
+
+def _list_provider_models(provider: object) -> list[str]:
+    list_models = getattr(provider, "list_models", None)
+    if callable(list_models):
+        return list_models()
+    if isinstance(provider, MockProvider):
+        return ["mock-model"]
+    raise ProviderError("当前模型通道不支持获取模型列表。")
 
 
 def _as_bool(value: Any, default: bool) -> bool:

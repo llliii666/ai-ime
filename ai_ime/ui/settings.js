@@ -57,6 +57,7 @@ function bindUi() {
   document.getElementById("deployRime").addEventListener("click", deployRime);
   document.getElementById("openRimeDir").addEventListener("click", openRimeDir);
   document.getElementById("testProvider").addEventListener("click", testProvider);
+  document.getElementById("model_select").addEventListener("change", applySelectedModel);
   document.getElementById("addManualCorrection").addEventListener("click", addManualCorrection);
   document.getElementById("openKeylogFile").addEventListener("click", () => openRecordFile("keylog"));
   document.getElementById("openLearningLog").addEventListener("click", () => openRecordFile("learning"));
@@ -69,7 +70,7 @@ function bindUi() {
   document.getElementById("recordSort").addEventListener("change", loadRecords);
   document.getElementById("refreshRecords").addEventListener("click", loadRecords);
   document.getElementById("provider_preset").addEventListener("change", applyProviderPreset);
-  document.getElementById("provider").addEventListener("change", syncTopbar);
+  document.getElementById("provider").addEventListener("change", handleProviderTypeChange);
   document.getElementById("listener_enabled").addEventListener("change", syncTopbar);
   syncActionState();
 }
@@ -88,6 +89,7 @@ async function loadState() {
   fillForm(response.settings);
   renderMeta(response.meta);
   populateProviderPresets(response.meta.providerPresets || []);
+  syncModelPage();
   syncTopbar();
   if (document.getElementById("records").classList.contains("active")) {
     await loadRecords();
@@ -150,9 +152,18 @@ async function testProvider() {
   if (!apiReady()) {
     return;
   }
+  resetModelSelect("正在获取模型列表");
+  setProviderTestState("testing", "正在测试连接");
   setStatus("正在测试模型连接");
   const response = await window.pywebview.api.test_provider(collectPayload());
-  setStatus(response.message || (response.ok ? "模型连接正常" : "模型连接失败"), response.ok ? "ok" : "error");
+  if (!response.ok) {
+    setProviderTestState("error", response.message || "模型连接失败");
+    setStatus(response.message || "模型连接失败", "error");
+    return;
+  }
+  renderModelOptions(response.models || []);
+  setProviderTestState("ok", response.message || "模型连接正常");
+  setStatus(response.message || "模型连接正常", "ok");
 }
 
 async function addManualCorrection() {
@@ -273,6 +284,7 @@ function fillForm(settings) {
 }
 
 function collectPayload() {
+  syncActiveModelInput();
   const settings = {};
   fieldIds.forEach((id) => {
     const element = document.getElementById(id);
@@ -295,16 +307,21 @@ function renderMeta(meta) {
 
 function populateProviderPresets(presets) {
   providerPresets = Array.isArray(presets) ? presets : [];
+  renderProviderPresetOptions();
+}
+
+function renderProviderPresetOptions() {
   const select = document.getElementById("provider_preset");
-  const current = select.value || "custom";
+  const provider = document.getElementById("provider").value;
+  const current = detectProviderPreset();
   select.innerHTML = "";
-  select.appendChild(new Option("自定义", "custom"));
-  providerPresets.forEach((preset) => {
+  select.appendChild(new Option(provider === "openai-compatible" ? "自定义中转商" : "自定义", "custom"));
+  providerPresets.filter((preset) => preset.provider === provider).forEach((preset) => {
     const option = new Option(preset.label, preset.id);
     option.title = preset.description || "";
     select.appendChild(option);
   });
-  select.value = detectProviderPreset() || current;
+  select.value = current || "custom";
   if (!select.value) {
     select.value = "custom";
   }
@@ -313,6 +330,14 @@ function populateProviderPresets(presets) {
 function applyProviderPreset() {
   const presetId = document.getElementById("provider_preset").value;
   if (!presetId || presetId === "custom") {
+    if (document.getElementById("provider").value === "openai-compatible") {
+      document.getElementById("openai_base_url").value = "";
+      document.getElementById("openai_model").value = "";
+    }
+    resetModelSelect("请先测试连接");
+    setProviderTestState("", "等待测试");
+    syncModelPage();
+    syncTopbar();
     return;
   }
   const preset = providerPresets.find((item) => item.id === presetId);
@@ -326,9 +351,33 @@ function applyProviderPreset() {
   } else if (preset.provider === "openai-compatible") {
     document.getElementById("openai_base_url").value = preset.base_url || "";
     document.getElementById("openai_model").value = preset.model || "";
+  } else if (preset.provider === "mock") {
+    document.getElementById("openai_model").value = preset.model || "mock-model";
+    document.getElementById("ollama_model").value = "";
   }
+  resetModelSelect("请先测试连接");
+  if (preset.provider !== "mock") {
+    setProviderTestState("", "等待测试");
+  }
+  syncModelPage();
   syncTopbar();
   setStatus(`已应用接口预设：${preset.label}`, "ok");
+}
+
+function handleProviderTypeChange() {
+  renderProviderPresetOptions();
+  const provider = document.getElementById("provider").value;
+  const defaultPreset = providerPresets.find((preset) => preset.provider === provider);
+  if (defaultPreset) {
+    document.getElementById("provider_preset").value = defaultPreset.id;
+    applyProviderPreset();
+  } else {
+    document.getElementById("provider_preset").value = "custom";
+    applyProviderPreset();
+  }
+  resetModelSelect("请先测试连接");
+  syncModelPage();
+  syncTopbar();
 }
 
 function detectProviderPreset() {
@@ -350,6 +399,84 @@ function detectProviderPreset() {
     return provider === "mock";
   });
   return matched ? matched.id : "custom";
+}
+
+function syncModelPage() {
+  const provider = document.getElementById("provider").value;
+  document.getElementById("openaiProviderConfig").classList.toggle("active", provider === "openai-compatible");
+  document.getElementById("ollamaProviderConfig").classList.toggle("active", provider === "ollama");
+  document.getElementById("mockProviderConfig").classList.toggle("active", provider === "mock");
+  const modelLabel = document.querySelector('label[for="openai_model"]');
+  if (modelLabel) {
+    modelLabel.textContent = "手动模型名";
+  }
+  if (provider === "ollama" && !document.getElementById("openai_model").value.trim()) {
+    document.getElementById("openai_model").value = document.getElementById("ollama_model").value.trim();
+  }
+  if (provider === "mock") {
+    renderModelOptions(["mock-model"]);
+    setProviderTestState("ok", "本地模拟无需连接测试");
+  }
+}
+
+function resetModelSelect(label) {
+  const select = document.getElementById("model_select");
+  select.innerHTML = "";
+  select.appendChild(new Option(label, ""));
+  select.disabled = true;
+}
+
+function renderModelOptions(models) {
+  const select = document.getElementById("model_select");
+  const items = Array.isArray(models) ? models.filter(Boolean) : [];
+  select.innerHTML = "";
+  if (items.length === 0) {
+    select.appendChild(new Option("没有返回模型列表，可手动填写", ""));
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  items.forEach((model) => {
+    select.appendChild(new Option(model, model));
+  });
+  const current = activeModelValue();
+  if (current && items.includes(current)) {
+    select.value = current;
+  } else {
+    select.value = items[0];
+    applySelectedModel();
+  }
+}
+
+function applySelectedModel() {
+  const value = document.getElementById("model_select").value;
+  if (!value) {
+    return;
+  }
+  document.getElementById("openai_model").value = value;
+  syncActiveModelInput();
+}
+
+function activeModelValue() {
+  const provider = document.getElementById("provider").value;
+  if (provider === "ollama") {
+    return document.getElementById("ollama_model").value.trim() || document.getElementById("openai_model").value.trim();
+  }
+  return document.getElementById("openai_model").value.trim();
+}
+
+function syncActiveModelInput() {
+  const provider = document.getElementById("provider").value;
+  const model = document.getElementById("openai_model").value.trim() || document.getElementById("model_select").value;
+  if (provider === "ollama") {
+    document.getElementById("ollama_model").value = model;
+  }
+}
+
+function setProviderTestState(type, message) {
+  const node = document.getElementById("providerTestState");
+  node.textContent = message;
+  node.className = `connection-state ${type || ""}`.trim();
 }
 
 function renderRecords(records) {
@@ -463,6 +590,7 @@ function applyInitialState() {
     fillForm(state.settings);
     renderMeta(state.meta);
     populateProviderPresets(state.meta.providerPresets || []);
+    syncModelPage();
     syncTopbar();
     setStatus("配置已预载，正在连接本地后端");
   } catch {
