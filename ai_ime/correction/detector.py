@@ -6,7 +6,8 @@ from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.models import CorrectionEvent
 
 
-CONFIRM_KEYS = {"space", "enter"}
+CANDIDATE_SELECTION_KEYS = {str(index) for index in range(10)}
+CONFIRM_KEYS = {"space", "enter", *CANDIDATE_SELECTION_KEYS}
 DELETE_KEYS = {"backspace", "delete"}
 
 
@@ -140,7 +141,7 @@ def _parse_token(token: str) -> list[KeyStroke]:
         kind = "backspace"
     elif name in {"del", "delete"}:
         kind = "delete"
-    elif name in {"space", "enter", "reset"}:
+    elif name in {"space", "enter", "reset", *CANDIDATE_SELECTION_KEYS}:
         kind = name
     else:
         return [KeyStroke("char", char) for char in f"{{{token}}}"]

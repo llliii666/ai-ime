@@ -155,7 +155,7 @@ When the tray listener is enabled, AI IME watches for this correction shape:
 wrong-pinyin -> backspace/delete -> correct-pinyin -> space/enter
 ```
 
-After the confirm key, it reads the focused Windows text control through UI Automation, compares the text before and after commit, and stores a rule only if it can extract newly inserted Chinese text. If focused text cannot be read, the correction is skipped instead of creating a risky rule.
+Candidate number selection is also treated as a confirm key, so `1` through `9` on the main keyboard and common numpad names can trigger learning after the corrected pinyin. After the confirm key, it reads the focused Windows text control through UI Automation, compares the text before and after commit, and stores a rule only if it can extract newly inserted Chinese text. If focused text cannot be read, the correction is skipped instead of creating a risky rule.
 
 To verify with 小狼毫:
 

@@ -11,6 +11,9 @@ class ListenerTests(unittest.TestCase):
     def test_keyboard_name_to_stroke(self) -> None:
         self.assertEqual(keyboard_name_to_stroke("x"), KeyStroke("char", "x"))
         self.assertEqual(keyboard_name_to_stroke("space"), KeyStroke("space"))
+        self.assertEqual(keyboard_name_to_stroke("1"), KeyStroke("1"))
+        self.assertEqual(keyboard_name_to_stroke("num 1"), KeyStroke("1"))
+        self.assertEqual(keyboard_name_to_stroke("numpad 2"), KeyStroke("2"))
         self.assertEqual(keyboard_name_to_stroke("backspace"), KeyStroke("backspace"))
         self.assertIsNone(keyboard_name_to_stroke("shift"))
 
@@ -32,9 +35,9 @@ class ListenerTests(unittest.TestCase):
             writer.write(KeyLogEntry(timestamp=1.0, event_type="up", name="i"))
             writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="backspace"))
             writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="x"))
-            writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="space"))
+            writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="1"))
 
-            self.assertEqual(keylog_to_sequence(path), "xainzai{backspace}x{space}")
+            self.assertEqual(keylog_to_sequence(path), "xainzai{backspace}x{1}")
 
 
 if __name__ == "__main__":

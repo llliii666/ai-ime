@@ -13,6 +13,15 @@ class DetectorTests(unittest.TestCase):
         self.assertEqual(event.committed_text, "现在")
         self.assertEqual(event.commit_key, "space")
 
+    def test_detect_from_sequence_with_candidate_number(self) -> None:
+        event = detect_from_sequence("xainzai{backspace*7}xianzai{1}", committed_text="现在")
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.wrong_pinyin, "xainzai")
+        self.assertEqual(event.correct_pinyin, "xianzai")
+        self.assertEqual(event.committed_text, "现在")
+        self.assertEqual(event.commit_key, "1")
+
     def test_detector_requires_committed_text(self) -> None:
         detector = CorrectionDetector()
         for stroke in parse_sequence("xainzai{delete}xianzai{enter}"):

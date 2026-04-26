@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any
 
-from ai_ime.correction.detector import DELETE_KEYS, KeyStroke
+from ai_ime.correction.detector import CANDIDATE_SELECTION_KEYS, DELETE_KEYS, KeyStroke
 
 
 class ListenerError(RuntimeError):
@@ -34,12 +34,26 @@ class KeyLogWriter:
 
 def keyboard_name_to_stroke(name: str) -> KeyStroke | None:
     normalized = name.lower().strip()
+    candidate_key = _candidate_selection_key(normalized)
+    if candidate_key is not None:
+        return KeyStroke(candidate_key)
     if len(normalized) == 1 and normalized.isalpha():
         return KeyStroke("char", normalized)
     if normalized in DELETE_KEYS:
         return KeyStroke(normalized)
     if normalized in {"space", "enter"}:
         return KeyStroke(normalized)
+    return None
+
+
+def _candidate_selection_key(normalized_name: str) -> str | None:
+    if normalized_name in CANDIDATE_SELECTION_KEYS:
+        return normalized_name
+    for prefix in ("num ", "numpad ", "number "):
+        if normalized_name.startswith(prefix):
+            suffix = normalized_name[len(prefix) :].strip()
+            if suffix in CANDIDATE_SELECTION_KEYS:
+                return suffix
     return None
 
 
