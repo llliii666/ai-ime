@@ -76,7 +76,9 @@ class RimeGeneratorTests(unittest.TestCase):
         content = render_lua_logger(Path(r"C:\Users\tester\AppData\Local\AIIME\keylog.jsonl"))
 
         self.assertIn("LOG_PATH = [[C:\\Users\\tester\\AppData\\Local\\AIIME\\keylog.jsonl]]", content)
-        self.assertIn('"source":' , content)
+        self.assertIn('LOCK_PATH = LOG_PATH .. ".lock"', content)
+        self.assertIn("local function acquire_lock()", content)
+        self.assertIn('"source":', content)
         self.assertIn('"candidate_text":', content)
         self.assertIn("commit_notifier:connect", content)
 

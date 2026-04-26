@@ -10,7 +10,7 @@ from typing import Any
 
 from ai_ime.config import default_data_dir, default_db_path
 from ai_ime.correction.normalize import normalize_pinyin
-from ai_ime.correction.rules import event_supports_rule
+from ai_ime.correction.rules import classify_mistake, event_supports_rule
 from ai_ime.db import connect, init_db, list_events, upsert_rules
 from ai_ime.learning import _append_learning_log, _build_provider
 from ai_ime.listener import KeyLogEntry, keyboard_name_to_stroke, keylog_file_lock
@@ -101,12 +101,13 @@ class AdaptiveAnalysisScheduler:
             return AnalysisRunResult(False, 0, 0, 0, next_interval, "No new typing activity")
 
         keylog_payload = keylog_payload_for_settings(self.settings, keylog_entries)
-        if not events and not keylog_payload:
+        events_for_provider = events_for_analysis(events, new_events, keylog_payload, force=force)
+        if not events_for_provider and not keylog_payload:
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, len(keylog_entries), 0, next_interval, "No correction events to analyze")
 
         try:
-            rules = _build_provider(self.settings).analyze_events(events, keylog_entries=keylog_payload)
+            rules = _build_provider(self.settings).analyze_events(events_for_provider, keylog_entries=keylog_payload)
         except ProviderError as exc:
             _append_learning_log(f"scheduled AI analysis failed: {exc}")
             save_scheduler_state(_failure_state(state, next_interval), self.state_path)
@@ -116,7 +117,7 @@ class AdaptiveAnalysisScheduler:
             save_scheduler_state(_failure_state(state, next_interval), self.state_path)
             return AnalysisRunResult(True, 0, len(keylog_entries), len(new_events), next_interval, str(exc))
 
-        accepted_rules, rejected_rule_items = partition_rules_by_evidence(rules, events, keylog_payload)
+        accepted_rules, rejected_rule_items = partition_rules_by_evidence(rules, events_for_provider, keylog_payload)
         rejected = len(rejected_rule_items)
         with closing(connect(self.db_path)) as conn:
             init_db(conn)
@@ -139,7 +140,7 @@ class AdaptiveAnalysisScheduler:
         )
         _append_learning_log(
             "scheduled AI analysis "
-            f"events={len(new_events)} keylogs={len(keylog_payload)}/{len(keylog_entries)} "
+            f"events={len(events_for_provider)}/{len(new_events)} keylogs={len(keylog_payload)}/{len(keylog_entries)} "
             f"rules={upserted} rejected={rejected} deleted_keylog_bytes={deleted_keylog_bytes} next={next_interval}s"
         )
         message = "AI analysis completed"
@@ -155,7 +156,7 @@ class AdaptiveAnalysisScheduler:
             returned_rules=len(rules),
             rejected_rules=rejected,
             sent_keylog_count=len(keylog_payload),
-            sent_event_count=len(events),
+            sent_event_count=len(events_for_provider),
             deleted_keylog_bytes=deleted_keylog_bytes,
             rules=tuple(accepted_rules),
             rejected_rule_items=tuple(rejected_rule_items),
@@ -179,6 +180,21 @@ def keylog_payload_for_settings(settings: AppSettings, entries: list[KeyLogEntry
         return entries
     if settings.record_candidate_commits:
         return [entry for entry in entries if entry.event_type == "commit" or _is_semantic_edit_key(entry)]
+    return []
+
+
+def events_for_analysis(
+    all_events: list[CorrectionEvent],
+    new_events: list[CorrectionEvent],
+    keylog_payload: list[KeyLogEntry],
+    force: bool = False,
+) -> list[CorrectionEvent]:
+    if new_events:
+        return new_events
+    if keylog_payload:
+        return []
+    if force:
+        return all_events
     return []
 
 
@@ -263,7 +279,8 @@ def _add_supported_keylog_triple(
     wrong = normalize_pinyin(wrong_entry.pinyin or wrong_entry.name)
     correct = normalize_pinyin(correct_entry.pinyin or correct_entry.name)
     text = (correct_entry.committed_text or correct_entry.candidate_text or "").strip()
-    if wrong and correct and text and wrong != correct:
+    mistake_type = classify_mistake(wrong, correct)
+    if wrong and correct and text and wrong != correct and mistake_type != "unknown" and min(len(wrong), len(correct)) >= 3:
         triples.add((wrong, correct, text))
 
 

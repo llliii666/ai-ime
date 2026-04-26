@@ -57,6 +57,20 @@ class ListenerTests(unittest.TestCase):
             self.assertEqual(entry.selection_index, 0)
             self.assertEqual(entry.commit_key, "1")
 
+    def test_read_keylog_skips_malformed_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "keylog.jsonl"
+            path.write_text(
+                '{"timestamp":1,"event_type":"down","name":"x"}\n'
+                ',"role":"rime_edit"}\n'
+                '{"timestamp":2,"event_type":"commit","name":"xianzai","committed_text":"现在"}\n',
+                encoding="utf-8",
+            )
+
+            entries = read_keylog(path)
+
+            self.assertEqual([entry.name for entry in entries], ["x", "xianzai"])
+
     def test_keylog_file_lock_uses_sidecar_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "keylog.jsonl"

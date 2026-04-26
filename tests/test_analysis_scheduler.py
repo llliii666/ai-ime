@@ -8,6 +8,7 @@ from ai_ime.analysis_scheduler import (
     AdaptiveAnalysisScheduler,
     choose_next_interval,
     delete_keylog_prefix,
+    events_for_analysis,
     filter_rules_by_evidence,
     keylog_payload_for_settings,
     load_scheduler_state,
@@ -23,8 +24,10 @@ from ai_ime.settings import AppSettings
 class FakeProvider:
     def __init__(self) -> None:
         self.keylog_count = 0
+        self.event_count = 0
 
     def analyze_events(self, events, keylog_entries=None):
+        self.event_count = len(events or [])
         self.keylog_count = len(keylog_entries or [])
         return [
             LearnedRule(
@@ -105,6 +108,14 @@ class AnalysisSchedulerTests(unittest.TestCase):
 
         self.assertEqual([entry.name for entry in payload], ["xainzai", "backspace", "xianzai"])
 
+    def test_events_for_analysis_does_not_mix_old_events_into_keylog_batch(self) -> None:
+        old_event = CorrectionEvent("xainzai", "xianzai", "现在", id=1)
+        keylog = [KeyLogEntry(timestamp=1.0, event_type="commit", name="keneneg", committed_text="可讷讷给")]
+
+        self.assertEqual(events_for_analysis([old_event], [], keylog, force=True), [])
+        self.assertEqual(events_for_analysis([old_event], [], [], force=True), [old_event])
+        self.assertEqual(events_for_analysis([old_event], [old_event], keylog, force=False), [old_event])
+
     def test_rime_commit_delete_commit_sequence_supports_ai_rule(self) -> None:
         entries = [
             KeyLogEntry(
@@ -143,6 +154,45 @@ class AnalysisSchedulerTests(unittest.TestCase):
         accepted = filter_rules_by_evidence(rules, events=[], keylog_entries=entries)
 
         self.assertEqual(accepted, rules)
+
+    def test_distant_rime_commit_sequence_does_not_support_ai_rule(self) -> None:
+        entries = [
+            KeyLogEntry(
+                timestamp=1.0,
+                event_type="commit",
+                name="gongneng",
+                pinyin="gongneng",
+                committed_text="功能",
+                role="rime_commit",
+                source="rime-lua",
+            ),
+            KeyLogEntry(timestamp=2.0, event_type="down", name="delete", role="rime_edit", source="rime-lua"),
+            KeyLogEntry(
+                timestamp=3.0,
+                event_type="commit",
+                name="haishi",
+                pinyin="haishi",
+                committed_text="还是",
+                role="rime_commit",
+                source="rime-lua",
+            ),
+        ]
+        rules = [
+            LearnedRule(
+                wrong_pinyin="gongneng",
+                correct_pinyin="haishi",
+                committed_text="还是",
+                confidence=0.85,
+                weight=145000,
+                count=1,
+                mistake_type="semantic_correction",
+                provider="fake",
+            )
+        ]
+
+        accepted = filter_rules_by_evidence(rules, events=[], keylog_entries=entries)
+
+        self.assertEqual(accepted, [])
 
     def test_read_keylog_entries_since_offset(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,6 +242,7 @@ class AnalysisSchedulerTests(unittest.TestCase):
 
             state = load_scheduler_state(state_path)
             self.assertTrue(result.attempted)
+            self.assertEqual(provider.event_count, 1)
             self.assertEqual(provider.keylog_count, 1)
             self.assertEqual(result.upserted_rules, 1)
             self.assertEqual(result.returned_rules, 1)
@@ -201,6 +252,49 @@ class AnalysisSchedulerTests(unittest.TestCase):
             self.assertEqual(state.last_analyzed_event_id, 1)
             self.assertEqual(state.last_keylog_offset, 0)
             self.assertEqual(keylog_path.read_text(encoding="utf-8"), "")
+
+    def test_run_once_with_keylog_does_not_resend_old_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                event_id = insert_event(conn, CorrectionEvent("xainzai", "xianzai", "现在", source="manual-ui"))
+            state_path.write_text(
+                f'{{"last_keylog_offset":0,"last_analyzed_event_id":{event_id},"next_interval_seconds":1800,"last_run_at":0}}',
+                encoding="utf-8",
+            )
+            KeyLogWriter(keylog_path).write(
+                KeyLogEntry(
+                    timestamp=1.0,
+                    event_type="commit",
+                    name="keneneg",
+                    pinyin="keneneg",
+                    committed_text="可讷讷给",
+                    role="rime_commit",
+                    source="rime-lua",
+                )
+            )
+            provider = FakeProvider()
+            settings = AppSettings(
+                auto_analyze_with_ai=True,
+                provider="openai-compatible",
+                send_full_keylog=True,
+                delete_sent_keylog=False,
+                keylog_file=str(keylog_path),
+            )
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with patch("ai_ime.analysis_scheduler._build_provider", return_value=provider), patch(
+                "ai_ime.analysis_scheduler._append_learning_log"
+            ):
+                result = scheduler.run_once(force=True)
+
+            self.assertTrue(result.attempted)
+            self.assertEqual(provider.event_count, 0)
+            self.assertEqual(provider.keylog_count, 1)
+            self.assertEqual(result.sent_event_count, 0)
 
     def test_delete_keylog_prefix_preserves_unsent_tail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

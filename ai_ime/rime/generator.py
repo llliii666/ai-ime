@@ -98,6 +98,7 @@ def render_lua_logger(log_path: Path, enabled: bool = True) -> str:
 local M = {{}}
 
 local LOG_PATH = {_lua_long_string(str(log_path))}
+local LOCK_PATH = LOG_PATH .. ".lock"
 local ENABLED = {_lua_bool(enabled)}
 local kNoop = 2
 
@@ -133,12 +134,36 @@ local function json_number_or_null(value)
   return "null"
 end
 
+local function acquire_lock()
+  for _ = 1, 120 do
+    local token = LOCK_PATH .. ".rime." .. tostring(os.time()) .. "." .. tostring(math.random(1000000))
+    local marker = io.open(token, "w")
+    if marker ~= nil then
+      marker:write("rime-lua")
+      marker:close()
+      if os.rename(token, LOCK_PATH) then
+        return true
+      end
+      os.remove(token)
+    end
+  end
+  return false
+end
+
+local function release_lock()
+  os.remove(LOCK_PATH)
+end
+
 local function append_event(event)
   if not ENABLED then
     return
   end
+  if not acquire_lock() then
+    return
+  end
   local file = io.open(LOG_PATH, "a")
   if not file then
+    release_lock()
     return
   end
   file:write("{{")
@@ -155,6 +180,7 @@ local function append_event(event)
   file:write(',"commit_key":' .. json_string(event.commit_key))
   file:write("}}\\n")
   file:close()
+  release_lock()
 end
 
 local function key_code(key)
@@ -254,6 +280,7 @@ local function is_delete_key(key)
 end
 
 function M.init(env)
+  math.randomseed(os.time())
   env.ai_ime_pending_commit = nil
   env.ai_ime_commit_connection = env.engine.context.commit_notifier:connect(function(context)
     local pending = env.ai_ime_pending_commit or capture_context(context, nil, env)

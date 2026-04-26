@@ -138,7 +138,10 @@ def read_keylog(path: Path) -> list[KeyLogEntry]:
     for line in lines:
         if not line.strip():
             continue
-        payload = json.loads(line)
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
         entries.append(
             KeyLogEntry(
                 timestamp=float(payload.get("timestamp", 0.0)),
