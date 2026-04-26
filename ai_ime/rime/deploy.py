@@ -27,7 +27,7 @@ def deploy_rime_files(
     rime_dir: Path,
     schema_id: str = "luna_pinyin",
     dictionary_id: str = "ai_typo",
-    base_dictionary: str = "luna_pinyin",
+    base_dictionary: str = "",
     force_schema_patch: bool = False,
 ) -> DeploymentResult:
     rime_dir.mkdir(parents=True, exist_ok=True)

@@ -68,8 +68,6 @@ def main(argv: list[str] | None = None) -> int:
         detected_schema = detect_active_schema(Path(settings.rime_dir))
         if detected_schema and settings.rime_schema in {"", "luna_pinyin"}:
             settings.rime_schema = detected_schema
-        if detected_schema and settings.rime_base_dictionary in {"", "luna_pinyin"}:
-            settings.rime_base_dictionary = detected_schema
 
     logger = KeyboardLogger()
     if settings.listener_enabled:
@@ -200,7 +198,7 @@ def open_settings_window(initial: AppSettings) -> tuple[AppSettings, str] | None
                 rime_dir=rime_dir.get().strip(),
                 rime_schema=rime_schema.get().strip() or "luna_pinyin",
                 rime_dictionary=rime_dictionary.get().strip() or "ai_typo",
-                rime_base_dictionary=rime_base_dictionary.get().strip() or "luna_pinyin",
+                rime_base_dictionary=rime_base_dictionary.get().strip(),
                 keylog_file=keylog_file.get().strip(),
             ),
             openai_api_key.get(),
