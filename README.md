@@ -14,6 +14,7 @@ xainzai -> xianzai -> 现在
 
 ```powershell
 uv run python -m ai_ime --help
+uv run --no-editable ai-ime --help
 uv run python -m unittest discover -s tests
 ```
 
