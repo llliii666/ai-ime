@@ -48,7 +48,7 @@ def _check_env_config() -> CheckResult:
         model = os.environ.get("AI_IME_OPENAI_MODEL", "gpt-5.4-mini")
         if not base_url:
             return CheckResult("env", "WARN", "AI_IME_OPENAI_BASE_URL is not set")
-        if not key:
+        if not key or _looks_like_placeholder_secret(key):
             return CheckResult("env", "WARN", "AI_IME_OPENAI_API_KEY is not set")
         return CheckResult("env", "OK", f"openai-compatible configured with model {model}")
     if provider == "ollama":
@@ -57,6 +57,11 @@ def _check_env_config() -> CheckResult:
             return CheckResult("env", "WARN", "AI_IME_OLLAMA_MODEL is not set")
         return CheckResult("env", "OK", f"ollama configured with model {model}")
     return CheckResult("env", "OK", f"provider {provider}")
+
+
+def _looks_like_placeholder_secret(value: str) -> bool:
+    normalized = value.strip().lower()
+    return normalized in {"replace-with-your-key", "your-api-key", "sk-xxx", "sk-..."}
 
 
 def _check_rime_user_dir() -> CheckResult:

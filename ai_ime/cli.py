@@ -26,6 +26,7 @@ from .providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, P
 from .rime.deploy import deploy_rime_files, rollback_backup
 from .rime.generator import export_rime_files
 from .rime.paths import find_existing_user_dir
+from .setup_wizard import format_setup_result, run_initial_setup
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -48,6 +49,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_parser = subparsers.add_parser("init-db", help="Create or migrate the SQLite database.")
     init_parser.set_defaults(handler=handle_init_db)
+
+    setup_parser = subparsers.add_parser("setup", help="Initialize local config, database, and environment checks.")
+    setup_parser.add_argument("--dry-run", action="store_true", help="Show what would be prepared without writing files.")
+    setup_parser.add_argument(
+        "--provider",
+        choices=["mock", "ollama", "openai-compatible"],
+        default="",
+        help="Optional provider to write into local settings.",
+    )
+    setup_parser.set_defaults(handler=handle_setup)
 
     doctor_parser = subparsers.add_parser("doctor", help="Check local AI IME environment.")
     doctor_parser.set_defaults(handler=handle_doctor)
@@ -177,6 +188,17 @@ def handle_init_db(args: argparse.Namespace) -> int:
         init_db(conn)
     print(f"Initialized database: {args.db}")
     return 0
+
+
+def handle_setup(args: argparse.Namespace) -> int:
+    result = run_initial_setup(
+        db_path=args.db,
+        env_path=args.env_file,
+        provider=args.provider or None,
+        dry_run=args.dry_run,
+    )
+    print(format_setup_result(result))
+    return 1 if result.has_error else 0
 
 
 def handle_doctor(args: argparse.Namespace) -> int:

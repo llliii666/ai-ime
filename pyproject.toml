@@ -4,6 +4,22 @@ version = "0.1.0"
 description = "Personal pinyin typo learning helper for Rime on Windows"
 readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+    { name = "AI IME contributors" },
+]
+keywords = ["ime", "rime", "windows", "pinyin", "autocorrect", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Desktop Environment",
+    "Topic :: Text Processing :: Linguistic",
+]
 dependencies = [
     "keyboard>=0.13.5",
     "pillow>=12.2.0",
@@ -23,3 +39,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ai_ime"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  windows:
+    name: Windows tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.11
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Run tests
+        run: uv run python -m unittest discover -s tests
+
+      - name: Smoke test settings UI resources
+        run: uv run python -m ai_ime.settings_window --smoke
+
+      - name: Build package
+        run: uv build --no-sources
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ime-python-package
+          path: dist/*
