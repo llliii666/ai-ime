@@ -7,24 +7,66 @@ CJK_RUN_PATTERN = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]+")
 
 
 class FocusTextReader:
+    def __init__(self, automation: object | None = None) -> None:
+        self._automation = automation
+
     def read_text(self) -> str | None:
-        try:
-            import uiautomation as automation  # type: ignore[import-not-found]
-        except Exception:
+        automation = self._automation or _load_automation()
+        if automation is None:
             return None
 
         try:
-            control = automation.GetFocusedControl()
+            control = automation.GetFocusedControl()  # type: ignore[attr-defined]
         except Exception:
             return None
         if control is None:
             return None
 
-        for getter in (_read_value_pattern, _read_text_pattern):
-            text = getter(control)
-            if text:
-                return text
+        for candidate in _control_chain(control):
+            for getter in (_read_value_pattern, _read_text_pattern, _read_legacy_accessible_pattern):
+                text = getter(candidate)
+                if text:
+                    return text
         return None
+
+
+def _load_automation() -> object | None:
+    try:
+        import uiautomation as automation  # type: ignore[import-not-found]
+    except Exception:
+        return None
+    return automation
+
+
+def _control_chain(control: object, max_depth: int = 8) -> list[object]:
+    chain: list[object] = []
+    current = control
+    seen: set[int] = set()
+    for _ in range(max_depth):
+        identity = id(current)
+        if identity in seen:
+            break
+        seen.add(identity)
+        chain.append(current)
+        parent = _parent_control(current)
+        if parent is None:
+            break
+        current = parent
+    return chain
+
+
+def _parent_control(control: object) -> object | None:
+    for method_name in ("GetParentControl", "GetParent"):
+        method = getattr(control, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            parent = method()
+        except Exception:
+            continue
+        if parent is not None:
+            return parent
+    return None
 
 
 def extract_committed_text(before: str | None, after: str | None, max_chars: int = 16) -> str:
@@ -69,6 +111,18 @@ def _read_text_pattern(control: object) -> str | None:
         return None
     if isinstance(value, str) and value.strip():
         return value
+    return None
+
+
+def _read_legacy_accessible_pattern(control: object) -> str | None:
+    try:
+        pattern = control.GetLegacyIAccessiblePattern()  # type: ignore[attr-defined]
+    except Exception:
+        return None
+    for attr in ("Value", "Name"):
+        value = getattr(pattern, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value
     return None
 
 

@@ -90,6 +90,7 @@ class AutoLearningEngine:
             time.sleep(self.capture_delay)
         committed_text = extract_committed_text(before_text, self.text_reader.read_text())
         if not committed_text:
+            _append_learning_log(f"skip commit snapshot role={role} pinyin={pinyin}: committed text was not detected")
             return ""
         if role == "candidate":
             with self._lock:
