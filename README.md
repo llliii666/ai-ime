@@ -78,3 +78,13 @@ Correction events can also be cleared:
 ```powershell
 uv run python -m ai_ime --db .data/ai-ime.db clear-events --yes
 ```
+
+## Controlled Local Key Logging
+
+The first listener is explicit and time-limited. It is not a hidden background service.
+
+```powershell
+uv run python -m ai_ime listen --duration 30 --log-file .data/keylog.jsonl --i-understand
+```
+
+Use `ctrl+alt+shift+p` to stop early. The listener records local key names to a JSONL file; it does not infer committed Chinese text yet.

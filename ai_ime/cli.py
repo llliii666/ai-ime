@@ -19,6 +19,7 @@ from .db import (
     set_rule_enabled,
     upsert_rules,
 )
+from .listener import ListenerError, run_keyboard_listener
 from .models import CorrectionEvent
 from .providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from .rime.deploy import deploy_rime_files, rollback_backup
@@ -71,6 +72,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     detect_parser.add_argument("--text", required=True, help="Committed text.")
     detect_parser.set_defaults(handler=handle_detect_sequence)
+
+    listen_parser = subparsers.add_parser("listen", help="Record explicit local keyboard logs for a limited time.")
+    listen_parser.add_argument("--log-file", type=Path, default=Path(".data/keylog.jsonl"), help="JSONL log file.")
+    listen_parser.add_argument("--duration", type=float, default=60.0, help="Seconds to listen; 0 means until hotkey.")
+    listen_parser.add_argument("--stop-hotkey", default="ctrl+alt+shift+p", help="Hotkey to stop listening.")
+    listen_parser.add_argument("--echo", action="store_true", help="Print captured key names while listening.")
+    listen_parser.add_argument(
+        "--i-understand",
+        action="store_true",
+        help="Required acknowledgement that this records local keyboard input.",
+    )
+    listen_parser.set_defaults(handler=handle_listen)
 
     analyze_parser = subparsers.add_parser("analyze", help="Aggregate events into learned rules.")
     analyze_parser.add_argument("--min-count", type=int, default=1, help="Minimum observations per rule.")
@@ -202,6 +215,25 @@ def handle_detect_sequence(args: argparse.Namespace) -> int:
         init_db(conn)
         event_id = insert_event(conn, event)
     print(f"Detected event #{event_id}: {event.wrong_pinyin} -> {event.correct_pinyin} -> {event.committed_text}")
+    return 0
+
+
+def handle_listen(args: argparse.Namespace) -> int:
+    if not args.i_understand:
+        print("Refusing to start keyboard logging without --i-understand.")
+        return 2
+    print(f"Listening for {args.duration} second(s). Stop hotkey: {args.stop_hotkey}. Log: {args.log_file}")
+    try:
+        captured = run_keyboard_listener(
+            log_file=args.log_file,
+            duration=args.duration,
+            stop_hotkey=args.stop_hotkey,
+            echo=args.echo,
+        )
+    except ListenerError as exc:
+        print(f"Keyboard listener failed: {exc}")
+        return 1
+    print(f"Captured {captured} keyboard event(s).")
     return 0
 
 
