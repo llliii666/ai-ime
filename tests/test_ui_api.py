@@ -18,14 +18,29 @@ class SettingsApiTests(unittest.TestCase):
                 "provider": "openai-compatible",
                 "openai_base_url": "http://relay.test/v1",
                 "openai_model": "gpt-5.4-mini",
+                "provider_preset": "custom",
             }
         )
 
         payload = _settings_payload(settings)
 
         self.assertEqual(payload["apiKey"], "")
+        self.assertEqual(payload["provider_preset"], "custom")
         self.assertEqual(payload["openai_model"], "gpt-5.4-mini")
         self.assertFalse(payload["listener_enabled"])
+
+    def test_settings_from_payload_preserves_provider_preset_independent_of_model(self) -> None:
+        settings = _settings_from_payload(
+            {
+                "provider": "openai-compatible",
+                "provider_preset": "deepseek",
+                "openai_base_url": "https://api.deepseek.com/v1",
+                "openai_model": "deepseek-v4-flash",
+            }
+        )
+
+        self.assertEqual(settings.provider_preset, "deepseek")
+        self.assertEqual(settings.openai_model, "deepseek-v4-flash")
 
     def test_save_settings_preserves_existing_env_key_when_api_key_blank(self) -> None:
         old_local_app_data = os.environ.get("LOCALAPPDATA")
@@ -47,6 +62,7 @@ class SettingsApiTests(unittest.TestCase):
                                 "send_full_keylog": False,
                                 "start_on_login": False,
                                 "provider": "openai-compatible",
+                                "provider_preset": "custom",
                                 "openai_base_url": "http://relay.test/v1",
                                 "openai_model": "gpt-5.4-mini",
                                 "ollama_base_url": "http://localhost:11434",

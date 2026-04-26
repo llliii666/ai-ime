@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ai_ime.config import default_data_dir, env_value
+from ai_ime.providers.presets import infer_provider_preset
 
 
 SETTINGS_FILE_NAME = "settings.json"
@@ -22,6 +23,7 @@ class AppSettings:
     send_full_keylog: bool = False
     start_on_login: bool = False
     provider: str = "openai-compatible"
+    provider_preset: str = "openai"
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-5.4-mini"
     openai_api_key_env: str = "AI_IME_OPENAI_API_KEY"
@@ -57,6 +59,12 @@ def load_app_settings(path: Path | None = None) -> AppSettings:
     for key, value in payload.items():
         if key in allowed:
             setattr(settings, key, value)
+    if "provider_preset" not in payload:
+        settings.provider_preset = infer_provider_preset(
+            settings.provider,
+            openai_base_url=settings.openai_base_url,
+            ollama_base_url=settings.ollama_base_url,
+        )
     return settings
 
 
@@ -73,15 +81,22 @@ def save_app_settings(settings: AppSettings, path: Path | None = None) -> Path:
 
 def settings_from_env() -> AppSettings:
     data_dir = default_data_dir()
+    provider = env_value("AI_IME_PROVIDER", default="openai-compatible")
+    openai_base_url = env_value("AI_IME_OPENAI_BASE_URL", default="https://api.openai.com/v1")
+    ollama_base_url = env_value("AI_IME_OLLAMA_BASE_URL", default="http://localhost:11434")
     return AppSettings(
         auto_learn_enabled=env_value("AI_IME_AUTO_LEARN", default="true").lower() != "false",
         auto_analyze_with_ai=env_value("AI_IME_AUTO_ANALYZE_WITH_AI", default="false").lower() == "true",
         auto_deploy_rime=env_value("AI_IME_AUTO_DEPLOY_RIME", default="true").lower() != "false",
-        provider=env_value("AI_IME_PROVIDER", default="openai-compatible"),
-        openai_base_url=env_value("AI_IME_OPENAI_BASE_URL", default="https://api.openai.com/v1"),
+        provider=provider,
+        provider_preset=env_value(
+            "AI_IME_PROVIDER_PRESET",
+            default=infer_provider_preset(provider, openai_base_url=openai_base_url, ollama_base_url=ollama_base_url),
+        ),
+        openai_base_url=openai_base_url,
         openai_model=env_value("AI_IME_OPENAI_MODEL", "AI_IME_AI_MODEL", default="gpt-5.4-mini"),
         openai_api_key_env=env_value("AI_IME_OPENAI_API_KEY_ENV", default="AI_IME_OPENAI_API_KEY"),
-        ollama_base_url=env_value("AI_IME_OLLAMA_BASE_URL", default="http://localhost:11434"),
+        ollama_base_url=ollama_base_url,
         ollama_model=env_value("AI_IME_OLLAMA_MODEL", "AI_IME_AI_MODEL"),
         keylog_file=str(data_dir / "keylog.jsonl"),
     )
@@ -95,6 +110,7 @@ def write_provider_env(settings: AppSettings, api_key: str | None = None, path: 
             "AI_IME_AUTO_ANALYZE_WITH_AI": "true" if settings.auto_analyze_with_ai else "false",
             "AI_IME_AUTO_DEPLOY_RIME": "true" if settings.auto_deploy_rime else "false",
             "AI_IME_PROVIDER": settings.provider,
+            "AI_IME_PROVIDER_PRESET": settings.provider_preset,
             "AI_IME_OPENAI_BASE_URL": settings.openai_base_url,
             "AI_IME_OPENAI_MODEL": settings.openai_model,
             "AI_IME_OPENAI_API_KEY_ENV": settings.openai_api_key_env,

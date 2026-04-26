@@ -13,6 +13,7 @@ from ai_ime.settings import AppSettings, default_settings_path, load_app_setting
 
 
 ENV_TEMPLATE = """AI_IME_PROVIDER=openai-compatible
+AI_IME_PROVIDER_PRESET=openai
 AI_IME_OPENAI_BASE_URL=https://api.openai.com/v1
 AI_IME_OPENAI_API_KEY=replace-with-your-key
 AI_IME_OPENAI_MODEL=gpt-5.4-mini

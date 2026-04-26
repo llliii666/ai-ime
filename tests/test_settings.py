@@ -23,6 +23,7 @@ class SettingsTests(unittest.TestCase):
             path = Path(tmp) / ".env"
             settings = AppSettings(
                 provider="openai-compatible",
+                provider_preset="deepseek",
                 openai_base_url="http://example.test/v1",
                 openai_model="gpt-5.4-mini",
             )
@@ -31,8 +32,28 @@ class SettingsTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8")
 
             self.assertIn("AI_IME_PROVIDER=openai-compatible", content)
+            self.assertIn("AI_IME_PROVIDER_PRESET=deepseek", content)
             self.assertIn("AI_IME_OPENAI_MODEL=gpt-5.4-mini", content)
             self.assertIn("AI_IME_OPENAI_API_KEY=test-key", content)
+
+    def test_load_app_settings_infers_missing_provider_preset_from_base_url(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(
+                """
+                {
+                  "provider": "openai-compatible",
+                  "openai_base_url": "https://api.deepseek.com/v1",
+                  "openai_model": "deepseek-v4-flash"
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            loaded = load_app_settings(path)
+
+            self.assertEqual(loaded.provider_preset, "deepseek")
+            self.assertEqual(loaded.openai_model, "deepseek-v4-flash")
 
     def tearDown(self) -> None:
         os.environ.pop("AI_IME_PROVIDER", None)

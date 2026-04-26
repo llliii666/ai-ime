@@ -15,7 +15,7 @@ from ai_ime.db import connect, delete_event, delete_rule, init_db, list_events, 
 from ai_ime.learning import AutoLearningEngine
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
-from ai_ime.providers.presets import provider_presets_payload
+from ai_ime.providers.presets import infer_provider_preset, provider_presets_payload
 from ai_ime.rime.deploy import deploy_rime_files
 from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
 from ai_ime.settings import (
@@ -346,6 +346,9 @@ def _settings_payload(settings: AppSettings) -> dict[str, Any]:
 
 
 def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
+    provider = _as_string(payload.get("provider"), "openai-compatible")
+    openai_base_url = _as_string(payload.get("openai_base_url"), "https://api.openai.com/v1")
+    ollama_base_url = _as_string(payload.get("ollama_base_url"), "http://localhost:11434")
     return AppSettings(
         listener_enabled=_as_bool(payload.get("listener_enabled"), True),
         auto_learn_enabled=_as_bool(payload.get("auto_learn_enabled"), True),
@@ -354,11 +357,15 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
         record_full_keylog=_as_bool(payload.get("record_full_keylog"), True),
         send_full_keylog=_as_bool(payload.get("send_full_keylog"), False),
         start_on_login=_as_bool(payload.get("start_on_login"), False),
-        provider=_as_string(payload.get("provider"), "openai-compatible"),
-        openai_base_url=_as_string(payload.get("openai_base_url"), "https://api.openai.com/v1"),
+        provider=provider,
+        provider_preset=_as_string(
+            payload.get("provider_preset"),
+            infer_provider_preset(provider, openai_base_url=openai_base_url, ollama_base_url=ollama_base_url),
+        ),
+        openai_base_url=openai_base_url,
         openai_model=_as_string(payload.get("openai_model"), "gpt-5.4-mini"),
         openai_api_key_env=_as_string(payload.get("openai_api_key_env"), "AI_IME_OPENAI_API_KEY"),
-        ollama_base_url=_as_string(payload.get("ollama_base_url"), "http://localhost:11434"),
+        ollama_base_url=ollama_base_url,
         ollama_model=_as_string(payload.get("ollama_model"), ""),
         rime_dir=_as_string(payload.get("rime_dir"), ""),
         rime_schema=_as_string(payload.get("rime_schema"), "luna_pinyin"),

@@ -7,6 +7,7 @@ const fieldIds = [
   "send_full_keylog",
   "start_on_login",
   "provider",
+  "provider_preset",
   "openai_base_url",
   "openai_model",
   "ollama_base_url",
@@ -72,9 +73,6 @@ function bindUi() {
   document.getElementById("provider_preset").addEventListener("change", applyProviderPreset);
   document.getElementById("provider").addEventListener("change", handleProviderTypeChange);
   document.getElementById("listener_enabled").addEventListener("change", syncTopbar);
-  ["openai_base_url", "openai_model", "ollama_base_url"].forEach((id) => {
-    document.getElementById(id).addEventListener("input", renderModelSummary);
-  });
   syncActionState();
 }
 
@@ -91,15 +89,15 @@ async function loadState() {
   lastState = response;
   fillForm(response.settings);
   renderMeta(response.meta);
-  populateProviderPresets(response.meta.providerPresets || []);
+  populateProviderPresets(response.meta.providerPresets || [], response.settings.provider_preset || "");
   syncModelPage();
-  renderModelSummary();
+  renderSavedModelSummary(response.settings);
   syncTopbar();
   if (document.getElementById("records").classList.contains("active")) {
     await loadRecords();
   }
   renderStoragePaths(response.meta.storagePaths || []);
-  renderModelSummary();
+  renderSavedModelSummary(response.settings);
   setStatus("配置已读取", "ok");
 }
 
@@ -114,6 +112,9 @@ async function saveSettings() {
     return;
   }
   document.getElementById("apiKey").value = "";
+  if (response.settings) {
+    renderSavedModelSummary(response.settings);
+  }
   setStatus(response.message || "设置已保存", "ok");
   await loadState();
 }
@@ -314,15 +315,15 @@ function renderMeta(meta) {
   document.getElementById("apiKeyState").textContent = meta.apiKeySaved ? `已保存 ${meta.apiKeyMask}` : "未保存密钥";
 }
 
-function populateProviderPresets(presets) {
+function populateProviderPresets(presets, preferredPresetId = "") {
   providerPresets = Array.isArray(presets) ? presets : [];
-  renderProviderPresetOptions();
+  renderProviderPresetOptions(preferredPresetId);
 }
 
-function renderProviderPresetOptions() {
+function renderProviderPresetOptions(preferredPresetId = "") {
   const select = document.getElementById("provider_preset");
   const provider = document.getElementById("provider").value;
-  const current = detectProviderPreset();
+  const current = resolveProviderPresetSelection(provider, preferredPresetId || select.value);
   select.innerHTML = "";
   select.appendChild(new Option(provider === "openai-compatible" ? "自定义中转商" : "自定义", "custom"));
   providerPresets.filter((preset) => preset.provider === provider).forEach((preset) => {
@@ -336,6 +337,16 @@ function renderProviderPresetOptions() {
   }
 }
 
+function resolveProviderPresetSelection(provider, preferredPresetId = "") {
+  if (preferredPresetId === "custom") {
+    return "custom";
+  }
+  if (providerPresets.some((preset) => preset.id === preferredPresetId && preset.provider === provider)) {
+    return preferredPresetId;
+  }
+  return detectProviderPresetByBaseUrl(provider);
+}
+
 function applyProviderPreset() {
   const presetId = document.getElementById("provider_preset").value;
   if (!presetId || presetId === "custom") {
@@ -346,7 +357,6 @@ function applyProviderPreset() {
     resetModelSelect("请先测试连接");
     setProviderTestState("", "等待测试");
     syncModelPage();
-    renderModelSummary();
     syncTopbar();
     return;
   }
@@ -370,7 +380,6 @@ function applyProviderPreset() {
     setProviderTestState("", "等待测试");
   }
   syncModelPage();
-  renderModelSummary();
   syncTopbar();
   setStatus(`已应用接口预设：${preset.label}`, "ok");
 }
@@ -388,29 +397,29 @@ function handleProviderTypeChange() {
   }
   resetModelSelect("请先测试连接");
   syncModelPage();
-  renderModelSummary();
   syncTopbar();
 }
 
-function detectProviderPreset() {
-  const provider = document.getElementById("provider").value;
+function detectProviderPresetByBaseUrl(provider = document.getElementById("provider").value) {
   const openaiBase = document.getElementById("openai_base_url").value.trim();
-  const openaiModel = document.getElementById("openai_model").value.trim();
   const ollamaBase = document.getElementById("ollama_base_url").value.trim();
-  const ollamaModel = document.getElementById("ollama_model").value.trim();
   const matched = providerPresets.find((preset) => {
     if (preset.provider !== provider) {
       return false;
     }
     if (provider === "openai-compatible") {
-      return preset.base_url === openaiBase && preset.model === openaiModel;
+      return normalizeUrl(preset.base_url) === normalizeUrl(openaiBase);
     }
     if (provider === "ollama") {
-      return preset.base_url === ollamaBase && preset.model === ollamaModel;
+      return normalizeUrl(preset.base_url) === normalizeUrl(ollamaBase);
     }
     return provider === "mock";
   });
   return matched ? matched.id : "custom";
+}
+
+function normalizeUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
 }
 
 function syncModelPage() {
@@ -425,7 +434,6 @@ function syncModelPage() {
     renderModelOptions(["mock-model"]);
     setProviderTestState("ok", "本地模拟无需连接测试");
   }
-  renderModelSummary();
 }
 
 function resetModelSelect(label) {
@@ -464,7 +472,6 @@ function applySelectedModel() {
   }
   document.getElementById("openai_model").value = value;
   syncActiveModelInput();
-  renderModelSummary();
 }
 
 function activeModelValue() {
@@ -481,27 +488,52 @@ function syncActiveModelInput() {
   if (provider === "ollama") {
     document.getElementById("ollama_model").value = model;
   }
-  renderModelSummary();
 }
 
-function renderModelSummary() {
-  const provider = document.getElementById("provider")?.value || "";
+function renderSavedModelSummary(settings = lastState?.settings) {
   const summaryProvider = document.getElementById("summaryProvider");
   const summaryBaseUrl = document.getElementById("summaryBaseUrl");
   const summaryModel = document.getElementById("summaryModel");
   if (!summaryProvider || !summaryBaseUrl || !summaryModel) {
     return;
   }
-  const presetSelect = document.getElementById("provider_preset");
-  const presetLabel = presetSelect?.selectedOptions?.[0]?.textContent || "自定义";
+  if (!settings) {
+    summaryProvider.textContent = "读取中";
+    summaryBaseUrl.textContent = "读取中";
+    summaryModel.textContent = "读取中";
+    return;
+  }
+  const provider = settings.provider || "";
+  const presetLabel = providerPresetLabel(settings);
   const baseUrl = provider === "ollama"
-    ? document.getElementById("ollama_base_url").value.trim()
+    ? settings.ollama_base_url || ""
     : provider === "mock"
       ? "本地模拟"
-      : document.getElementById("openai_base_url").value.trim();
+      : settings.openai_base_url || "";
+  const model = provider === "ollama" ? settings.ollama_model : provider === "mock" ? "本地模拟" : settings.openai_model;
   summaryProvider.textContent = `${providerLabels[provider] || provider || "未选择"} · ${presetLabel}`;
   summaryBaseUrl.textContent = baseUrl || "未填写";
-  summaryModel.textContent = activeModelValue() || "未选择";
+  summaryModel.textContent = model || "未选择";
+}
+
+function providerPresetLabel(settings) {
+  const presetId = settings.provider_preset || presetIdForSettings(settings);
+  const preset = providerPresets.find((item) => item.id === presetId && item.provider === settings.provider);
+  if (preset) {
+    return preset.label;
+  }
+  return settings.provider === "openai-compatible" ? "自定义中转商" : "自定义";
+}
+
+function presetIdForSettings(settings) {
+  if (settings.provider === "mock") {
+    return "mock";
+  }
+  const baseUrl = settings.provider === "ollama" ? settings.ollama_base_url : settings.openai_base_url;
+  const matched = providerPresets.find((preset) => {
+    return preset.provider === settings.provider && normalizeUrl(preset.base_url) === normalizeUrl(baseUrl || "");
+  });
+  return matched ? matched.id : "custom";
 }
 
 function setProviderTestState(type, message) {
@@ -738,10 +770,6 @@ function syncTopbar() {
   const provider = document.getElementById("provider").value;
   document.getElementById("listenerPill").textContent = listener ? "监听中" : "已暂停";
   document.getElementById("providerPill").textContent = providerLabels[provider] || provider;
-  const preset = document.getElementById("provider_preset");
-  if (preset) {
-    preset.value = detectProviderPreset();
-  }
 }
 
 function setStatus(message, type = "") {
@@ -773,10 +801,10 @@ function applyInitialState() {
     lastState = state;
     fillForm(state.settings);
     renderMeta(state.meta);
-    populateProviderPresets(state.meta.providerPresets || []);
+    populateProviderPresets(state.meta.providerPresets || [], state.settings.provider_preset || "");
     renderStoragePaths(state.meta.storagePaths || []);
     syncModelPage();
-    renderModelSummary();
+    renderSavedModelSummary(state.settings);
     syncTopbar();
     setStatus("配置已预载，正在连接本地后端");
   } catch {

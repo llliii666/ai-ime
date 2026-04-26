@@ -1,6 +1,6 @@
 import unittest
 
-from ai_ime.providers.presets import PROVIDER_PRESETS, provider_presets_payload
+from ai_ime.providers.presets import PROVIDER_PRESETS, infer_provider_preset, provider_presets_payload
 
 
 class ProviderPresetTests(unittest.TestCase):
@@ -17,6 +17,16 @@ class ProviderPresetTests(unittest.TestCase):
 
         self.assertTrue(all(isinstance(item["label"], str) for item in payload))
         self.assertTrue(all(item["provider"] in {"openai-compatible", "ollama", "mock"} for item in payload))
+
+    def test_infers_preset_from_base_url_without_requiring_default_model(self) -> None:
+        self.assertEqual(
+            infer_provider_preset("openai-compatible", openai_base_url="https://api.deepseek.com/v1/"),
+            "deepseek",
+        )
+        self.assertEqual(
+            infer_provider_preset("openai-compatible", openai_base_url="http://relay.example/v1"),
+            "custom",
+        )
 
 
 if __name__ == "__main__":

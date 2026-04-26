@@ -99,3 +99,14 @@ PROVIDER_PRESETS: tuple[ProviderPreset, ...] = (
 
 def provider_presets_payload() -> list[dict[str, str]]:
     return [asdict(preset) for preset in PROVIDER_PRESETS]
+
+
+def infer_provider_preset(provider: str, openai_base_url: str = "", ollama_base_url: str = "") -> str:
+    if provider == "mock":
+        return "mock"
+    base_url = ollama_base_url if provider == "ollama" else openai_base_url
+    normalized_base = base_url.rstrip("/")
+    for preset in PROVIDER_PRESETS:
+        if preset.provider == provider and preset.base_url.rstrip("/") == normalized_base:
+            return preset.id
+    return "custom"
