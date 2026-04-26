@@ -19,7 +19,7 @@ from .db import (
     set_rule_enabled,
     upsert_rules,
 )
-from .listener import ListenerError, run_keyboard_listener
+from .listener import ListenerError, keylog_to_sequence, run_keyboard_listener
 from .models import CorrectionEvent
 from .providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from .rime.deploy import deploy_rime_files, rollback_backup
@@ -84,6 +84,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Required acknowledgement that this records local keyboard input.",
     )
     listen_parser.set_defaults(handler=handle_listen)
+
+    detect_log_parser = subparsers.add_parser("detect-log", help="Detect one correction from a local keyboard log.")
+    detect_log_parser.add_argument("--log-file", type=Path, required=True, help="JSONL keyboard log file.")
+    detect_log_parser.add_argument("--text", required=True, help="Committed text to attach to the detected correction.")
+    detect_log_parser.set_defaults(handler=handle_detect_log)
+
+    clear_keylog_parser = subparsers.add_parser("clear-keylog", help="Delete a local keyboard log file.")
+    clear_keylog_parser.add_argument("--log-file", type=Path, required=True, help="JSONL keyboard log file.")
+    clear_keylog_parser.add_argument("--yes", action="store_true", help="Confirm deletion.")
+    clear_keylog_parser.set_defaults(handler=handle_clear_keylog)
 
     analyze_parser = subparsers.add_parser("analyze", help="Aggregate events into learned rules.")
     analyze_parser.add_argument("--min-count", type=int, default=1, help="Minimum observations per rule.")
@@ -234,6 +244,34 @@ def handle_listen(args: argparse.Namespace) -> int:
         print(f"Keyboard listener failed: {exc}")
         return 1
     print(f"Captured {captured} keyboard event(s).")
+    return 0
+
+
+def handle_detect_log(args: argparse.Namespace) -> int:
+    sequence = keylog_to_sequence(args.log_file)
+    if not sequence:
+        print("No usable key sequence found in log.")
+        return 1
+    event = detect_from_sequence(sequence, committed_text=args.text)
+    if event is None:
+        print("No correction event detected.")
+        return 1
+    with connect(args.db) as conn:
+        init_db(conn)
+        event_id = insert_event(conn, event)
+    print(f"Detected event #{event_id}: {event.wrong_pinyin} -> {event.correct_pinyin} -> {event.committed_text}")
+    return 0
+
+
+def handle_clear_keylog(args: argparse.Namespace) -> int:
+    if not args.yes:
+        print("Refusing to delete keylog without --yes.")
+        return 2
+    if not args.log_file.exists():
+        print("Keylog file does not exist.")
+        return 0
+    args.log_file.unlink()
+    print(f"Deleted keylog: {args.log_file}")
     return 0
 
 

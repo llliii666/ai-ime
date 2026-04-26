@@ -43,6 +43,37 @@ def keyboard_name_to_stroke(name: str) -> KeyStroke | None:
     return None
 
 
+def keylog_to_sequence(path: Path) -> str:
+    parts: list[str] = []
+    for entry in read_keylog(path):
+        if entry.event_type != "down":
+            continue
+        stroke = keyboard_name_to_stroke(entry.name)
+        if stroke is None:
+            continue
+        parts.append(_stroke_to_sequence_part(stroke))
+    return "".join(parts)
+
+
+def read_keylog(path: Path) -> list[KeyLogEntry]:
+    entries: list[KeyLogEntry] = []
+    if not path.exists():
+        return entries
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        entries.append(
+            KeyLogEntry(
+                timestamp=float(payload.get("timestamp", 0.0)),
+                event_type=str(payload.get("event_type", "")),
+                name=str(payload.get("name", "")),
+                scan_code=payload.get("scan_code"),
+            )
+        )
+    return entries
+
+
 def run_keyboard_listener(
     log_file: Path,
     duration: float,
@@ -83,3 +114,9 @@ def run_keyboard_listener(
         keyboard.unhook(hook)
         keyboard.remove_hotkey(stop_hotkey)
     return captured
+
+
+def _stroke_to_sequence_part(stroke: KeyStroke) -> str:
+    if stroke.kind == "char":
+        return stroke.value
+    return f"{{{stroke.kind}}}"

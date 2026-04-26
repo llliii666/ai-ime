@@ -88,3 +88,10 @@ uv run python -m ai_ime listen --duration 30 --log-file .data/keylog.jsonl --i-u
 ```
 
 Use `ctrl+alt+shift+p` to stop early. The listener records local key names to a JSONL file; it does not infer committed Chinese text yet.
+
+To turn a local keylog into a correction event, provide the final committed text:
+
+```powershell
+uv run python -m ai_ime --db .data/ai-ime.db detect-log --log-file .data/keylog.jsonl --text 现在
+uv run python -m ai_ime clear-keylog --log-file .data/keylog.jsonl --yes
+```
