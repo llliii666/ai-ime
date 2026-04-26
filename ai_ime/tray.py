@@ -12,7 +12,7 @@ import pystray
 
 from ai_ime.config import load_env_file
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
-from ai_ime.rime.paths import find_existing_user_dir
+from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
 from ai_ime.runtime import clear_pid_file, write_pid_file
 from ai_ime.settings import AppSettings, env_api_key, load_app_settings, save_app_settings, write_provider_env
 from ai_ime.startup import set_start_on_login
@@ -64,6 +64,12 @@ def main(argv: list[str] | None = None) -> int:
         detected = find_existing_user_dir()
         if detected is not None:
             settings.rime_dir = str(detected)
+    if settings.rime_dir:
+        detected_schema = detect_active_schema(Path(settings.rime_dir))
+        if detected_schema and settings.rime_schema in {"", "luna_pinyin"}:
+            settings.rime_schema = detected_schema
+        if detected_schema and settings.rime_base_dictionary in {"", "luna_pinyin"}:
+            settings.rime_base_dictionary = detected_schema
 
     logger = KeyboardLogger()
     if settings.listener_enabled:
