@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from .config import default_db_path, env_value, load_env_file
+from .correction.detector import detect_from_sequence
 from .correction.normalize import normalize_pinyin
 from .correction.rules import aggregate_rules
 from .db import (
@@ -61,6 +62,15 @@ def build_parser() -> argparse.ArgumentParser:
     clear_events_parser = subparsers.add_parser("clear-events", help="Delete all correction events.")
     clear_events_parser.add_argument("--yes", action="store_true", help="Confirm deletion.")
     clear_events_parser.set_defaults(handler=handle_clear_events)
+
+    detect_parser = subparsers.add_parser("detect-sequence", help="Detect and store one correction from a key sequence.")
+    detect_parser.add_argument(
+        "--sequence",
+        required=True,
+        help="Typed sequence, e.g. xainzai{backspace*7}xianzai{space}.",
+    )
+    detect_parser.add_argument("--text", required=True, help="Committed text.")
+    detect_parser.set_defaults(handler=handle_detect_sequence)
 
     analyze_parser = subparsers.add_parser("analyze", help="Aggregate events into learned rules.")
     analyze_parser.add_argument("--min-count", type=int, default=1, help="Minimum observations per rule.")
@@ -180,6 +190,18 @@ def handle_clear_events(args: argparse.Namespace) -> int:
         init_db(conn)
         deleted = clear_events(conn)
     print(f"Deleted {deleted} correction event(s).")
+    return 0
+
+
+def handle_detect_sequence(args: argparse.Namespace) -> int:
+    event = detect_from_sequence(args.sequence, committed_text=args.text)
+    if event is None:
+        print("No correction event detected.")
+        return 1
+    with connect(args.db) as conn:
+        init_db(conn)
+        event_id = insert_event(conn, event)
+    print(f"Detected event #{event_id}: {event.wrong_pinyin} -> {event.correct_pinyin} -> {event.committed_text}")
     return 0
 
 

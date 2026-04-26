@@ -22,6 +22,7 @@ uv run python -m unittest discover -s tests
 ```powershell
 uv run python -m ai_ime --db .data/ai-ime.db init-db
 uv run python -m ai_ime --db .data/ai-ime.db add-event --wrong xainzai --correct xianzai --text 现在
+uv run python -m ai_ime --db .data/ai-ime.db detect-sequence --sequence "xainzai{backspace*7}xianzai{space}" --text 现在
 uv run python -m ai_ime --db .data/ai-ime.db list-events
 uv run python -m ai_ime --db .data/ai-ime.db analyze
 uv run python -m ai_ime --db .data/ai-ime.db analyze-ai --provider mock

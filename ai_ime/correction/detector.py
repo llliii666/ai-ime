@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ai_ime.correction.normalize import normalize_pinyin
+from ai_ime.models import CorrectionEvent
+
+
+CONFIRM_KEYS = {"space", "enter"}
+DELETE_KEYS = {"backspace", "delete"}
+
+
+@dataclass(frozen=True)
+class KeyStroke:
+    kind: str
+    value: str = ""
+
+
+class CorrectionDetector:
+    def __init__(self) -> None:
+        self._current = ""
+        self._wrong: str | None = None
+        self._correct = ""
+        self._editing = False
+
+    def feed(self, stroke: KeyStroke, committed_text: str | None = None) -> CorrectionEvent | None:
+        if stroke.kind == "char":
+            char = normalize_pinyin(stroke.value)
+            if not char:
+                return None
+            if self._editing:
+                self._correct += char
+            else:
+                self._current += char
+            return None
+
+        if stroke.kind in DELETE_KEYS:
+            if not self._editing and self._current:
+                self._wrong = self._current
+                self._correct = ""
+                self._editing = True
+            return None
+
+        if stroke.kind in CONFIRM_KEYS:
+            event = self._build_event(stroke.kind, committed_text)
+            self.reset()
+            return event
+
+        if stroke.kind == "reset":
+            self.reset()
+            return None
+
+        return None
+
+    def reset(self) -> None:
+        self._current = ""
+        self._wrong = None
+        self._correct = ""
+        self._editing = False
+
+    def _build_event(self, commit_key: str, committed_text: str | None) -> CorrectionEvent | None:
+        if not self._wrong or not self._correct or not committed_text:
+            return None
+        wrong = normalize_pinyin(self._wrong)
+        correct = normalize_pinyin(self._correct)
+        text = committed_text.strip()
+        if not wrong or not correct or not text or wrong == correct:
+            return None
+        return CorrectionEvent(
+            wrong_pinyin=wrong,
+            correct_pinyin=correct,
+            committed_text=text,
+            commit_key=commit_key,
+            source="detector",
+        )
+
+
+def parse_sequence(sequence: str) -> list[KeyStroke]:
+    strokes: list[KeyStroke] = []
+    index = 0
+    while index < len(sequence):
+        char = sequence[index]
+        if char == "{":
+            end = sequence.find("}", index + 1)
+            if end == -1:
+                strokes.append(KeyStroke("char", char))
+                index += 1
+                continue
+            token = sequence[index + 1 : end].strip().lower()
+            strokes.extend(_parse_token(token))
+            index = end + 1
+            continue
+        strokes.append(KeyStroke("char", char))
+        index += 1
+    return strokes
+
+
+def detect_from_sequence(sequence: str, committed_text: str) -> CorrectionEvent | None:
+    detector = CorrectionDetector()
+    event: CorrectionEvent | None = None
+    for stroke in parse_sequence(sequence):
+        event = detector.feed(stroke, committed_text=committed_text if stroke.kind in CONFIRM_KEYS else None) or event
+    return event
+
+
+def _parse_token(token: str) -> list[KeyStroke]:
+    if "*" in token:
+        name, count_text = token.split("*", 1)
+        try:
+            count = max(1, int(count_text))
+        except ValueError:
+            count = 1
+    else:
+        name = token
+        count = 1
+    name = name.strip()
+    if name in {"bs", "backspace"}:
+        kind = "backspace"
+    elif name in {"del", "delete"}:
+        kind = "delete"
+    elif name in {"space", "enter", "reset"}:
+        kind = name
+    else:
+        return [KeyStroke("char", char) for char in f"{{{token}}}"]
+    return [KeyStroke(kind) for _ in range(count)]
