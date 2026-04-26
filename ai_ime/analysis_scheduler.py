@@ -14,7 +14,7 @@ from ai_ime.learning import _append_learning_log, _build_provider
 from ai_ime.listener import KeyLogEntry
 from ai_ime.models import CorrectionEvent
 from ai_ime.providers import ProviderError
-from ai_ime.settings import AppSettings
+from ai_ime.settings import AppSettings, resolved_keylog_path
 
 
 INTERVAL_TIERS_SECONDS = (600, 1800, 3600, 7200, 18000, 28800, 43200)
@@ -69,7 +69,7 @@ class AdaptiveAnalysisScheduler:
 
     def run_once(self) -> AnalysisRunResult:
         state = load_scheduler_state(self.state_path)
-        keylog_entries, next_offset = read_keylog_entries_since(Path(self.settings.keylog_file), state.last_keylog_offset)
+        keylog_entries, next_offset = read_keylog_entries_since(resolved_keylog_path(self.settings), state.last_keylog_offset)
         with closing(connect(self.db_path)) as conn:
             init_db(conn)
             events = list_events(conn)
@@ -101,11 +101,11 @@ class AdaptiveAnalysisScheduler:
             rules = _build_provider(self.settings).analyze_events(events, keylog_entries=keylog_payload)
         except ProviderError as exc:
             _append_learning_log(f"scheduled AI analysis failed: {exc}")
-            save_scheduler_state(base_state, self.state_path)
+            save_scheduler_state(_failure_state(state, next_interval), self.state_path)
             return AnalysisRunResult(True, 0, len(keylog_entries), len(new_events), next_interval, str(exc))
         except Exception as exc:
             _append_learning_log(f"scheduled AI analysis failed: {exc}")
-            save_scheduler_state(base_state, self.state_path)
+            save_scheduler_state(_failure_state(state, next_interval), self.state_path)
             return AnalysisRunResult(True, 0, len(keylog_entries), len(new_events), next_interval, str(exc))
 
         with closing(connect(self.db_path)) as conn:
@@ -139,6 +139,15 @@ class AdaptiveAnalysisScheduler:
 
 def should_send_keylog_entries(settings: AppSettings) -> bool:
     return settings.provider == "ollama" or settings.send_full_keylog
+
+
+def _failure_state(previous: AnalysisSchedulerState, next_interval: int) -> AnalysisSchedulerState:
+    return AnalysisSchedulerState(
+        last_keylog_offset=previous.last_keylog_offset,
+        last_analyzed_event_id=previous.last_analyzed_event_id,
+        next_interval_seconds=next_interval,
+        last_run_at=time.time(),
+    )
 
 
 def choose_next_interval(activity_count: int, current_interval: int = DEFAULT_INTERVAL_SECONDS) -> int:
@@ -212,7 +221,17 @@ def _keylog_entry_from_payload(payload: dict[str, Any]) -> KeyLogEntry:
         event_type=str(payload.get("event_type", "")),
         name=str(payload.get("name", "")),
         scan_code=payload.get("scan_code"),
+        pinyin=_optional_str(payload.get("pinyin")),
+        committed_text=_optional_str(payload.get("committed_text")),
+        role=_optional_str(payload.get("role")),
     )
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _next_idle_interval(current_interval: int) -> int:

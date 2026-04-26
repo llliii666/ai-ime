@@ -23,6 +23,7 @@
           <button class="nav-item" data-page="privacy">隐私</button>
           <button class="nav-item" data-page="model">模型</button>
           <button class="nav-item" data-page="rime">输入法</button>
+          <button class="nav-item" data-page="files">文件</button>
         </nav>
         <div class="sidebar-status">
           <span>配置文件</span>
@@ -69,6 +70,7 @@
             <label class="switch-row">
               <span>
                 <strong>启用键盘监听</strong>
+                <button class="help-tip" type="button" data-help="开启后会监听键盘按下事件，用于发现拼音纠错过程。关闭后不会自动学习新规则。">?</button>
                 <small>记录输入纠错过程，用于生成个人规则。</small>
               </span>
               <input id="listener_enabled" type="checkbox" />
@@ -76,6 +78,7 @@
             <label class="switch-row">
               <span>
                 <strong>自动识别并学习纠错</strong>
+                <button class="help-tip" type="button" data-help="发现错误拼音、删除、正确拼音、候选确认后，会尝试读取提交的中文并写入规则。">?</button>
                 <small>发现错拼、删除、重输、确认后，尝试读取提交中文并写入规则。</small>
               </span>
               <input id="auto_learn_enabled" type="checkbox" />
@@ -83,12 +86,13 @@
             <label class="switch-row">
               <span>
                 <strong>开机自启动</strong>
+                <button class="help-tip" type="button" data-help="写入 Windows 登录启动项。开启后登录系统会自动启动托盘程序。">?</button>
                 <small>登录 Windows 后自动启动托盘程序。</small>
               </span>
               <input id="start_on_login" type="checkbox" />
             </label>
             <div class="field-row">
-              <label for="keylog_file">键盘日志文件</label>
+              <label for="keylog_file">键盘日志文件 <button class="help-tip" type="button" data-help="保存原始按键和候选上屏快照的 JSONL 文件。关闭完整日志后不会继续写入原始按键。">?</button></label>
               <div class="path-control with-open">
                 <input id="keylog_file" type="text" />
                 <button class="secondary" data-browse="file" data-target="keylog_file">浏览</button>
@@ -108,15 +112,15 @@
               <span>适合自动读取不到中文时补录</span>
             </div>
             <div class="field-row">
-              <label for="manualWrongPinyin">错误拼音</label>
+              <label for="manualWrongPinyin">错误拼音 <button class="help-tip" type="button" data-help="用户经常误输入的拼音，例如把 xianzai 错打成 xainzai。">?</button></label>
               <input id="manualWrongPinyin" type="text" spellcheck="false" placeholder="例如 xainzai" />
             </div>
             <div class="field-row">
-              <label for="manualCorrectPinyin">正确拼音</label>
+              <label for="manualCorrectPinyin">正确拼音 <button class="help-tip" type="button" data-help="实际应该输入的拼音。保存后会作为规则匹配目标。">?</button></label>
               <input id="manualCorrectPinyin" type="text" spellcheck="false" placeholder="例如 xianzai" />
             </div>
             <div class="field-row">
-              <label for="manualCommittedText">对应中文</label>
+              <label for="manualCommittedText">对应中文 <button class="help-tip" type="button" data-help="正确拼音最终应该上屏的中文词。规则会把错误拼音导向这个候选词。">?</button></label>
               <input id="manualCommittedText" type="text" placeholder="例如 现在" />
             </div>
             <div class="button-row">
@@ -163,6 +167,7 @@
             <label class="switch-row">
               <span>
                 <strong>记录完整本地键盘日志</strong>
+                <button class="help-tip" type="button" data-help="开启后会保存原始按键日志，并记录候选上屏的中文快照。关闭后只保存已识别出的纠错事件。">?</button>
                 <small>关闭后只保留已经识别出的纠错事件。</small>
               </span>
               <input id="record_full_keylog" type="checkbox" />
@@ -170,6 +175,7 @@
             <label class="switch-row">
               <span>
                 <strong>允许云端/中转模型接收完整键入日志</strong>
+                <button class="help-tip" type="button" data-help="开启后 OpenAI 兼容接口和中转站也能收到完整键盘日志。涉及隐私，默认关闭。">?</button>
                 <small>本地模型不受该开关限制，云端模型默认不发送完整日志。</small>
               </span>
               <input id="send_full_keylog" type="checkbox" />
@@ -177,6 +183,7 @@
             <label class="switch-row">
               <span>
                 <strong>自动调用模型分析纠错事件</strong>
+                <button class="help-tip" type="button" data-help="后台按自适应间隔批量发送纠错事件。日志不会自动删除，只记录读取位置避免重复发送。">?</button>
                 <small>开启后后台按自适应间隔批量发送；云端默认不带完整键盘日志。</small>
               </span>
               <input id="auto_analyze_with_ai" type="checkbox" />
@@ -196,7 +203,7 @@
             </div>
             <div class="flow-grid">
               <div class="field-stack">
-                <label for="provider">接口类型</label>
+                <label for="provider">接口类型 <button class="help-tip" type="button" data-help="OpenAI 兼容适合官方接口和多数中转站；Ollama 是本地模型；本地模拟用于测试。">?</button></label>
                 <select id="provider">
                   <option value="openai-compatible">OpenAI 兼容</option>
                   <option value="ollama">Ollama 本地</option>
@@ -204,7 +211,7 @@
                 </select>
               </div>
               <div class="field-stack">
-                <label for="provider_preset">提供商</label>
+                <label for="provider_preset">提供商 <button class="help-tip" type="button" data-help="选择官方或常见提供商会自动填入默认地址；自定义中转商会留空地址。">?</button></label>
                 <select id="provider_preset">
                   <option value="custom">自定义中转商</option>
                 </select>
@@ -213,11 +220,11 @@
 
             <div class="dynamic-provider active" id="openaiProviderConfig">
               <div class="field-row compact">
-                <label for="openai_base_url">Base URL</label>
+                <label for="openai_base_url">Base URL <button class="help-tip" type="button" data-help="模型接口根地址。官方提供商会自动填入；中转商请填写它给你的 /v1 地址。">?</button></label>
                 <input id="openai_base_url" type="text" spellcheck="false" placeholder="例如：http://your-relay.example/v1" />
               </div>
               <div class="field-row compact">
-                <label for="apiKey">API Key</label>
+                <label for="apiKey">API Key <button class="help-tip" type="button" data-help="密钥会写入本地 .env 文件，不会显示在界面状态中。留空保存会继续使用已保存密钥。">?</button></label>
                 <div class="input-with-state">
                   <input id="apiKey" type="password" placeholder="留空则继续使用已保存密钥" autocomplete="off" />
                   <span id="apiKeyState">未保存密钥</span>
@@ -227,7 +234,7 @@
 
             <div class="dynamic-provider" id="ollamaProviderConfig">
               <div class="field-row compact">
-                <label for="ollama_base_url">Base URL</label>
+                <label for="ollama_base_url">Base URL <button class="help-tip" type="button" data-help="Ollama 默认地址是 http://localhost:11434。">?</button></label>
                 <input id="ollama_base_url" type="text" spellcheck="false" placeholder="例如：http://localhost:11434" />
               </div>
             </div>
@@ -241,21 +248,36 @@
 
             <div class="button-row model-actions">
               <button class="primary" id="testProvider">测试连接并获取模型</button>
+              <button class="help-tip" type="button" data-help="会先请求模型列表。OpenAI 兼容接口调用 /models，Ollama 调用 /api/tags。">?</button>
               <span class="connection-state" id="providerTestState">等待测试</span>
             </div>
 
             <div class="model-picker">
               <div class="field-row compact">
-                <label for="model_select">模型列表</label>
+                <label for="model_select">模型列表 <button class="help-tip" type="button" data-help="连接成功后自动填充。选择后会同步到手动模型名。">?</button></label>
                 <select id="model_select" disabled>
                   <option value="">请先测试连接</option>
                 </select>
               </div>
               <div class="field-row compact">
-                <label for="openai_model">手动模型名</label>
+                <label for="openai_model">手动模型名 <button class="help-tip" type="button" data-help="如果中转站不支持模型列表，可以直接输入模型名。保存后后台分析会使用该模型。">?</button></label>
                 <input id="openai_model" type="text" spellcheck="false" placeholder="测试失败或列表为空时可手动填写" />
               </div>
               <input id="ollama_model" type="hidden" />
+            </div>
+            <div class="config-summary" id="modelConfigSummary">
+              <div>
+                <span>当前接口</span>
+                <strong id="summaryProvider">读取中</strong>
+              </div>
+              <div>
+                <span>服务地址</span>
+                <strong id="summaryBaseUrl">读取中</strong>
+              </div>
+              <div>
+                <span>当前模型</span>
+                <strong id="summaryModel">读取中</strong>
+              </div>
             </div>
           </div>
 
@@ -272,27 +294,28 @@
               <span>以小狼毫为主体，AI IME 写入独立纠错词典</span>
             </div>
             <div class="field-row">
-              <label for="rime_dir">Rime 用户目录</label>
+              <label for="rime_dir">Rime 用户目录 <button class="help-tip" type="button" data-help="小狼毫保存用户词典、方案和补丁的目录。AI IME 会把纠错词典写入这里。">?</button></label>
               <div class="path-control">
                 <input id="rime_dir" type="text" />
                 <button class="secondary" data-browse="directory" data-target="rime_dir">浏览</button>
               </div>
             </div>
             <div class="field-row compact">
-              <label for="rime_schema">方案 ID</label>
+              <label for="rime_schema">方案 ID <button class="help-tip" type="button" data-help="当前小狼毫方案的标识，例如 rime_ice 或 luna_pinyin。部署时会给这个方案增加纠错 translator。">?</button></label>
               <input id="rime_schema" type="text" />
             </div>
             <div class="field-row compact">
-              <label for="rime_dictionary">纠错词典</label>
+              <label for="rime_dictionary">纠错词典 <button class="help-tip" type="button" data-help="AI IME 单独维护的 Rime 词典名，默认 ai_typo。建议不要和已有词典重名。">?</button></label>
               <input id="rime_dictionary" type="text" />
             </div>
             <div class="field-row compact">
-              <label for="rime_base_dictionary">可选导入词典</label>
+              <label for="rime_base_dictionary">可选导入词典 <button class="help-tip" type="button" data-help="需要让纠错词典继承某个已有词库时填写；不确定可以留空。">?</button></label>
               <input id="rime_base_dictionary" type="text" />
             </div>
             <label class="switch-row">
               <span>
                 <strong>学习后自动部署到小狼毫</strong>
+                <button class="help-tip" type="button" data-help="新规则写入后会更新 Rime 词典并尝试触发小狼毫重新部署。关闭后需要手动部署。">?</button>
                 <small>新规则写入后自动更新 Rime 文件，并尝试触发小狼毫重新部署。</small>
               </span>
               <input id="auto_deploy_rime" type="checkbox" />
@@ -306,6 +329,22 @@
           <div class="notice subdued">
             <strong>接入方式</strong>
             <span>AI IME 不替换小狼毫安装器和输入面板，只为当前方案增加一个高优先级纠错 translator。</span>
+          </div>
+        </section>
+
+        <section class="page" id="files" data-title="文件">
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>文件位置</h2>
+                <span>查看配置、缓存、数据库、日志和 Rime 文件的本机路径</span>
+              </div>
+            </div>
+            <div class="file-list" id="fileList"></div>
+          </div>
+          <div class="notice subdued">
+            <strong>日志保留</strong>
+            <span>发送给模型后的键盘日志不会自动删除；AI IME 会在分析状态文件中记录读取位置，下次只读取新增日志。需要清理时可打开文件位置后手动删除或清空。</span>
           </div>
         </section>
 

@@ -15,7 +15,7 @@ from ai_ime.learning import AutoLearningEngine
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
 from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
 from ai_ime.runtime import clear_pid_file, write_pid_file
-from ai_ime.settings import AppSettings, load_app_settings, save_app_settings
+from ai_ime.settings import AppSettings, load_app_settings, resolved_keylog_path, save_app_settings
 
 
 class KeyboardLogger:
@@ -39,7 +39,7 @@ class KeyboardLogger:
         if settings.auto_analyze_with_ai:
             self._analysis_scheduler = AdaptiveAnalysisScheduler(settings)
             self._analysis_scheduler.start()
-        writer = KeyLogWriter(Path(settings.keylog_file))
+        writer = KeyLogWriter(resolved_keylog_path(settings))
 
         def on_event(event: Any) -> None:
             event_type = str(getattr(event, "event_type", ""))

@@ -39,6 +39,21 @@ class DetectorTests(unittest.TestCase):
         self.assertEqual(pending.correct_pinyin, "xianzai")
         self.assertEqual(pending.commit_key, "enter")
 
+    def test_detector_handles_wrong_candidate_then_delete_and_retype(self) -> None:
+        detector = CorrectionDetector()
+        pending = None
+        for stroke in parse_sequence("xainzai{1}{backspace*4}xianzai{space}"):
+            if stroke.kind == "1":
+                self.assertEqual(detector.confirming_pinyin_candidate(), "xainzai")
+            if stroke.kind == "backspace":
+                detector.note_wrong_committed_text("喜爱能在")
+            pending = detector.feed_pending(stroke) or pending
+
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.wrong_pinyin, "xainzai")
+        self.assertEqual(pending.correct_pinyin, "xianzai")
+        self.assertEqual(pending.wrong_committed_text, "喜爱能在")
+
     def test_detector_ignores_same_pinyin(self) -> None:
         event = detect_from_sequence("xianzai{backspace}xianzai{space}", committed_text="现在")
 

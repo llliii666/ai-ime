@@ -7,7 +7,7 @@ from typing import Iterable
 from .models import CorrectionEvent, LearnedRule
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -33,6 +33,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             committed_text TEXT NOT NULL,
             commit_key TEXT NOT NULL DEFAULT 'unknown',
             app_id_hash TEXT,
+            wrong_committed_text TEXT,
             source TEXT NOT NULL DEFAULT 'manual',
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -54,6 +55,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    _migrate_schema(conn)
     conn.execute(
         """
         INSERT INTO schema_meta (key, value)
@@ -65,6 +67,12 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    event_columns = {row["name"] for row in conn.execute("PRAGMA table_info(correction_events)").fetchall()}
+    if "wrong_committed_text" not in event_columns:
+        conn.execute("ALTER TABLE correction_events ADD COLUMN wrong_committed_text TEXT")
+
+
 def insert_event(conn: sqlite3.Connection, event: CorrectionEvent) -> int:
     cursor = conn.execute(
         """
@@ -74,9 +82,10 @@ def insert_event(conn: sqlite3.Connection, event: CorrectionEvent) -> int:
             committed_text,
             commit_key,
             app_id_hash,
+            wrong_committed_text,
             source
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             event.wrong_pinyin,
@@ -84,6 +93,7 @@ def insert_event(conn: sqlite3.Connection, event: CorrectionEvent) -> int:
             event.committed_text,
             event.commit_key,
             event.app_id_hash,
+            event.wrong_committed_text,
             event.source,
         ),
     )
@@ -107,6 +117,7 @@ def list_events(conn: sqlite3.Connection, limit: int | None = None) -> list[Corr
             commit_key,
             source,
             app_id_hash,
+            wrong_committed_text,
             created_at
         FROM correction_events
         ORDER BY id
@@ -123,10 +134,39 @@ def list_events(conn: sqlite3.Connection, limit: int | None = None) -> list[Corr
             commit_key=row["commit_key"],
             source=row["source"],
             app_id_hash=row["app_id_hash"],
+            wrong_committed_text=row["wrong_committed_text"],
             created_at=row["created_at"],
         )
         for row in rows
     ]
+
+
+def update_event(conn: sqlite3.Connection, event_id: int, event: CorrectionEvent) -> bool:
+    cursor = conn.execute(
+        """
+        UPDATE correction_events
+        SET wrong_pinyin = ?,
+            correct_pinyin = ?,
+            committed_text = ?,
+            wrong_committed_text = ?
+        WHERE id = ?
+        """,
+        (
+            event.wrong_pinyin,
+            event.correct_pinyin,
+            event.committed_text,
+            event.wrong_committed_text,
+            event_id,
+        ),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def delete_event(conn: sqlite3.Connection, event_id: int) -> bool:
+    cursor = conn.execute("DELETE FROM correction_events WHERE id = ?", (event_id,))
+    conn.commit()
+    return cursor.rowcount > 0
 
 
 def upsert_rules(conn: sqlite3.Connection, rules: Iterable[LearnedRule]) -> int:
@@ -225,6 +265,39 @@ def set_rule_enabled(conn: sqlite3.Connection, rule_id: int, enabled: bool) -> b
         WHERE id = ?
         """,
         (1 if enabled else 0, rule_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def update_rule(conn: sqlite3.Connection, rule_id: int, rule: LearnedRule) -> bool:
+    cursor = conn.execute(
+        """
+        UPDATE learned_rules
+        SET wrong_pinyin = ?,
+            correct_pinyin = ?,
+            committed_text = ?,
+            confidence = ?,
+            weight = ?,
+            count = ?,
+            mistake_type = ?,
+            explanation = ?,
+            enabled = ?,
+            last_seen_at = datetime('now')
+        WHERE id = ?
+        """,
+        (
+            rule.wrong_pinyin,
+            rule.correct_pinyin,
+            rule.committed_text,
+            rule.confidence,
+            rule.weight,
+            rule.count,
+            rule.mistake_type,
+            rule.explanation,
+            1 if rule.enabled else 0,
+            rule_id,
+        ),
     )
     conn.commit()
     return cursor.rowcount > 0

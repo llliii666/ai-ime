@@ -11,12 +11,12 @@ from ai_ime.config import default_data_dir, default_db_path
 from ai_ime.correction.detector import CONFIRM_KEYS, CorrectionDetector, KeyStroke, PendingCorrection
 from ai_ime.correction.rules import aggregate_rules
 from ai_ime.db import connect, init_db, insert_event, list_events, list_rules, upsert_rules
-from ai_ime.listener import keyboard_name_to_stroke
+from ai_ime.listener import KeyLogEntry, KeyLogWriter, keyboard_name_to_stroke
 from ai_ime.models import CorrectionEvent
 from ai_ime.providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from ai_ime.rime.deploy import deploy_rime_files
 from ai_ime.rime.weasel import run_weasel_deployer
-from ai_ime.settings import AppSettings
+from ai_ime.settings import AppSettings, resolved_keylog_path
 from ai_ime.text_capture import FocusTextReader, extract_committed_text
 
 
@@ -48,6 +48,7 @@ class AutoLearningEngine:
         self.rime_redeployer = rime_redeployer
         self.detector = CorrectionDetector()
         self._lock = threading.Lock()
+        self._candidate_commits: dict[str, str] = {}
 
     def handle_key_event(self, event_type: str, name: str) -> PendingCorrection | None:
         if event_type != "down" or not self.settings.auto_learn_enabled:
@@ -59,9 +60,12 @@ class AutoLearningEngine:
 
     def handle_stroke(self, stroke: KeyStroke) -> PendingCorrection | None:
         before_text = self.text_reader.read_text() if stroke.kind in CONFIRM_KEYS else None
+        confirming_pinyin = self.detector.confirming_pinyin_candidate() if stroke.kind in CONFIRM_KEYS else ""
         with self._lock:
             pending = self.detector.feed_pending(stroke)
         if pending is None:
+            if confirming_pinyin:
+                self._schedule_commit_snapshot(confirming_pinyin, before_text, role="candidate")
             return None
         if self.async_finalize:
             timer = threading.Timer(self.capture_delay, self.finalize_pending, args=(pending, before_text))
@@ -70,6 +74,34 @@ class AutoLearningEngine:
         else:
             self.finalize_pending(pending, before_text)
         return pending
+
+    def _schedule_commit_snapshot(self, pinyin: str, before_text: str | None, role: str) -> None:
+        if not self.settings.record_full_keylog:
+            return
+        if self.async_finalize:
+            timer = threading.Timer(self.capture_delay, self.finalize_commit_snapshot, args=(pinyin, before_text, role))
+            timer.daemon = True
+            timer.start()
+        else:
+            self.finalize_commit_snapshot(pinyin, before_text, role)
+
+    def finalize_commit_snapshot(self, pinyin: str, before_text: str | None, role: str) -> str:
+        if self.capture_delay > 0 and not self.async_finalize:
+            time.sleep(self.capture_delay)
+        committed_text = extract_committed_text(before_text, self.text_reader.read_text())
+        if not committed_text:
+            return ""
+        if role == "candidate":
+            with self._lock:
+                self.detector.note_wrong_committed_text(committed_text)
+                self._candidate_commits[pinyin] = committed_text
+        _append_semantic_keylog(
+            resolved_keylog_path(self.settings),
+            pinyin=pinyin,
+            committed_text=committed_text,
+            role=role,
+        )
+        return committed_text
 
     def finalize_pending(self, pending: PendingCorrection, before_text: str | None) -> AutoLearningResult | None:
         if self.capture_delay > 0 and not self.async_finalize:
@@ -81,9 +113,21 @@ class AutoLearningEngine:
                 f"skip pending={pending.wrong_pinyin}->{pending.correct_pinyin}: committed text was not detected"
             )
             return None
-        event = pending.to_event(committed_text, source="auto-ui")
+        event = pending.to_event(
+            committed_text,
+            source="auto-ui",
+            wrong_committed_text=self._consume_candidate_commit(pending.wrong_pinyin)
+            or pending.wrong_committed_text,
+        )
         if event is None:
             return None
+        if self.settings.record_full_keylog:
+            _append_semantic_keylog(
+                resolved_keylog_path(self.settings),
+                pinyin=pending.correct_pinyin,
+                committed_text=committed_text,
+                role="correction",
+            )
         return self.learn_event(event)
 
     def learn_event(self, event: CorrectionEvent) -> AutoLearningResult:
@@ -122,6 +166,11 @@ class AutoLearningEngine:
             rime_redeployed=rime_redeployed,
         )
 
+    def _consume_candidate_commit(self, pinyin: str) -> str:
+        with self._lock:
+            return self._candidate_commits.pop(pinyin, "")
+
+
 def _build_provider(settings: AppSettings):
     if settings.provider == "mock":
         return MockProvider()
@@ -147,3 +196,16 @@ def _append_learning_log(message: str) -> None:
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(f"[{timestamp}] {message}\n")
+
+
+def _append_semantic_keylog(path: Path, pinyin: str, committed_text: str, role: str) -> None:
+    KeyLogWriter(path).write(
+        KeyLogEntry(
+            timestamp=time.time(),
+            event_type="commit",
+            name=pinyin,
+            pinyin=pinyin,
+            committed_text=committed_text,
+            role=role,
+        )
+    )

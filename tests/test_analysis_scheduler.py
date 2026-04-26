@@ -58,11 +58,21 @@ class AnalysisSchedulerTests(unittest.TestCase):
             writer = KeyLogWriter(path)
             writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="x"))
             offset = path.stat().st_size
-            writer.write(KeyLogEntry(timestamp=2.0, event_type="down", name="y"))
+            writer.write(
+                KeyLogEntry(
+                    timestamp=2.0,
+                    event_type="commit",
+                    name="xianzai",
+                    pinyin="xianzai",
+                    committed_text="现在",
+                    role="correction",
+                )
+            )
 
             entries, next_offset = read_keylog_entries_since(path, offset)
 
-            self.assertEqual([entry.name for entry in entries], ["y"])
+            self.assertEqual([entry.name for entry in entries], ["xianzai"])
+            self.assertEqual(entries[0].committed_text, "现在")
             self.assertEqual(next_offset, path.stat().st_size)
 
     def test_run_once_batches_events_and_allowed_keylogs(self) -> None:
@@ -94,6 +104,37 @@ class AnalysisSchedulerTests(unittest.TestCase):
             self.assertEqual(result.upserted_rules, 1)
             self.assertEqual(state.last_analyzed_event_id, 1)
             self.assertGreater(state.last_keylog_offset, 0)
+
+    def test_run_once_keeps_keylog_offset_when_provider_fails(self) -> None:
+        class FailingProvider:
+            def analyze_events(self, events, keylog_entries=None):
+                raise RuntimeError("provider down")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                insert_event(conn, CorrectionEvent("xainzai", "xianzai", "现在", source="test"))
+            KeyLogWriter(keylog_path).write(KeyLogEntry(timestamp=1.0, event_type="down", name="x"))
+            settings = AppSettings(
+                auto_analyze_with_ai=True,
+                provider="openai-compatible",
+                send_full_keylog=True,
+                keylog_file=str(keylog_path),
+            )
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with patch("ai_ime.analysis_scheduler._build_provider", return_value=FailingProvider()), patch(
+                "ai_ime.analysis_scheduler._append_learning_log"
+            ):
+                result = scheduler.run_once()
+
+            state = load_scheduler_state(state_path)
+            self.assertTrue(result.attempted)
+            self.assertEqual(state.last_keylog_offset, 0)
+            self.assertEqual(state.last_analyzed_event_id, 0)
 
 
 if __name__ == "__main__":

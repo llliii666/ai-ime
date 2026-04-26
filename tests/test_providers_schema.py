@@ -1,8 +1,9 @@
 import unittest
 
 from ai_ime.listener import KeyLogEntry
+from ai_ime.models import CorrectionEvent
 from ai_ime.providers.base import ProviderError
-from ai_ime.providers.prompt import build_user_prompt
+from ai_ime.providers.prompt import SYSTEM_PROMPT, build_user_prompt
 from ai_ime.providers.schema import parse_rules_json
 
 
@@ -38,10 +39,24 @@ class ProviderSchemaTests(unittest.TestCase):
             parse_rules_json('{"rules": {}}', provider="test")
 
     def test_prompt_can_include_keylog_context(self) -> None:
-        prompt = build_user_prompt([], keylog_entries=[KeyLogEntry(timestamp=1.0, event_type="down", name="x")])
+        prompt = build_user_prompt(
+            [CorrectionEvent("xainzai", "xianzai", "现在", wrong_committed_text="喜爱能在")],
+            keylog_entries=[
+                KeyLogEntry(
+                    timestamp=1.0,
+                    event_type="commit",
+                    name="xianzai",
+                    pinyin="xianzai",
+                    committed_text="现在",
+                    role="correction",
+                )
+            ],
+        )
 
         self.assertIn('"keylog_entries"', prompt)
-        self.assertIn('"name": "x"', prompt)
+        self.assertIn('"wrong_committed_text": "喜爱能在"', prompt)
+        self.assertIn('"role": "correction"', prompt)
+        self.assertIn("Do not derive rules from raw key events alone", SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

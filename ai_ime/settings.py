@@ -38,6 +38,13 @@ def default_settings_path() -> Path:
     return default_data_dir() / SETTINGS_FILE_NAME
 
 
+def resolved_keylog_path(settings: AppSettings) -> Path:
+    text = str(settings.keylog_file or "").strip()
+    if text:
+        return Path(text)
+    return default_data_dir() / "keylog.jsonl"
+
+
 def load_app_settings(path: Path | None = None) -> AppSettings:
     settings = settings_from_env()
     settings_path = path or default_settings_path()

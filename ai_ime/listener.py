@@ -20,6 +20,9 @@ class KeyLogEntry:
     event_type: str
     name: str
     scan_code: int | None = None
+    pinyin: str | None = None
+    committed_text: str | None = None
+    role: str | None = None
 
 
 class KeyLogWriter:
@@ -83,6 +86,9 @@ def read_keylog(path: Path) -> list[KeyLogEntry]:
                 event_type=str(payload.get("event_type", "")),
                 name=str(payload.get("name", "")),
                 scan_code=payload.get("scan_code"),
+                pinyin=payload.get("pinyin"),
+                committed_text=payload.get("committed_text"),
+                role=payload.get("role"),
             )
         )
     return entries
