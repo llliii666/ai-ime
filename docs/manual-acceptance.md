@@ -1,114 +1,136 @@
 # Manual Acceptance Checklist
 
-This checklist verifies the current MVP without installing system software or cloning external code.
+这份清单用于在 Windows 真机上验证当前 Alpha 功能。
 
-## 1. Environment
+## 1. 初始化和诊断
 
 ```powershell
-uv run --no-editable ai-ime --db .data/ai-ime.db doctor
+uv sync
+uv run python -m ai_ime setup --dry-run
+uv run python -m ai_ime setup
+uv run python -m ai_ime doctor
 ```
 
-Expected:
+期望：
 
-- `keyboard` is installed.
-- `.env` provider config is detected.
-- Rime user data directory is detected, or shown as a warning if Rime is not installed.
+- 数据库和设置文件可初始化。
+- `.env` 可检测；如果 key 仍是占位值，`doctor` 应显示 WARN。
+- Rime 用户目录能自动检测；没有安装 Rime 时显示 WARN 而不是崩溃。
 
-## 1.1 Tray App
+## 2. 托盘和设置窗口
 
 ```powershell
 uv run python run.py
+uv run python run.py --status
 ```
 
-Expected:
+期望：
 
-- The command returns after starting a background process.
-- An `AI` icon appears in the Windows notification area.
-- Keyboard logging starts if the listener is enabled in settings.
-- `uv run python run.py --status` reports a running tray pid.
+- 命令返回后后台进程仍在运行。
+- Windows 通知区域出现 `AI IME` 图标。
+- 点击图标可打开设置中心。
+- 设置保存后重新打开仍保留。
 
-Stop the background app:
+停止：
 
 ```powershell
 uv run python run.py --stop
 ```
 
-For foreground debugging:
+前台调试：
 
 ```powershell
 uv run --no-editable ai-ime-tray
 ```
 
-Expected:
-
-- An `AI` icon appears in the Windows notification area.
-- Clicking the icon opens the AI IME settings window.
-- Settings can be saved without crashing.
-- Exiting from the tray menu closes the app.
-
-## 2. Rule Learning
+## 3. 手动纠错闭环
 
 ```powershell
 uv run --no-editable ai-ime --db .data/acceptance.db init-db
 uv run --no-editable ai-ime --db .data/acceptance.db add-event --wrong xainzai --correct xianzai --text 现在
 uv run --no-editable ai-ime --db .data/acceptance.db analyze
-uv run --no-editable ai-ime --db .data/acceptance.db analyze-ai --timeout 120
 uv run --no-editable ai-ime --db .data/acceptance.db list-rules
 ```
 
-Expected:
+期望：
 
-- At least one enabled rule maps `xainzai -> xianzai -> 现在`.
-- The OpenAI-compatible rule uses the model from `.env`.
+- 至少一条启用规则映射 `xainzai -> xianzai -> 现在`。
 
-## 3. Rime Export
+## 4. 设置窗口资源 smoke test
+
+```powershell
+uv run python -m ai_ime.settings_window --smoke
+```
+
+期望：
+
+- 命令返回 0。
+- wheel 构建后仍能找到 `settings.html/css/js`。
+
+## 5. Rime 导出和回滚
 
 ```powershell
 uv run --no-editable ai-ime --db .data/acceptance.db export-rime --out .data/acceptance-rime
-```
-
-Expected:
-
-- `.data/acceptance-rime/ai_typo.dict.yaml` exists.
-- The dictionary contains one deduplicated entry for `现在	xainzai`.
-
-## 4. Safe Deploy Dry Run
-
-```powershell
 uv run --no-editable ai-ime --db .data/acceptance.db deploy-rime --rime-dir .data/acceptance-deploy
 uv run --no-editable ai-ime --db .data/acceptance.db rollback-rime --rime-dir .data/acceptance-deploy --backup .data/acceptance-deploy/.ai-ime-backups/<latest-backup>
 ```
 
-Expected:
+期望：
 
-- Deploy writes `ai_typo.dict.yaml`.
-- Rollback removes generated files or restores previous files.
+- 导出目录包含 `ai_typo.dict.yaml`。
+- 字典包含 `现在	xainzai`。
+- 部署会创建备份。
+- 回滚能恢复或移除生成文件。
 
-## 5. Real Rime Manual Check
+## 6. 真实小狼毫验证
 
-Only run this after reviewing the generated files:
+只在确认生成文件无误后执行：
 
 ```powershell
 uv run --no-editable ai-ime --db .data/acceptance.db deploy-rime --rime-dir "$env:APPDATA\Rime"
 ```
 
-Then redeploy Rime from the 小狼毫 menu and type `xainzai`.
+然后从小狼毫菜单执行“重新部署”，输入：
 
-Expected:
-
-- `现在` appears as a candidate.
-- Normal `xianzai` input still works.
-
-## 6. Controlled Keylog Flow
-
-```powershell
-uv run --no-editable ai-ime listen --duration 10 --log-file .data/keylog.jsonl --i-understand
-uv run --no-editable ai-ime --db .data/acceptance.db detect-log --log-file .data/keylog.jsonl --text 现在
-uv run --no-editable ai-ime clear-keylog --log-file .data/keylog.jsonl --yes
+```text
+xainzai
 ```
 
-Expected:
+期望：
 
-- Listener starts visibly and exits after the duration or stop hotkey.
-- Keylog can be deleted.
-- A correction event is detected only when the log contains a usable correction sequence.
+- `现在` 出现在候选列表中。
+- 正常输入 `xianzai` 不受影响。
+
+## 7. 自动学习验证
+
+推荐在记事本中执行：
+
+```text
+xainzai -> 删除 -> xianzai -> 空格
+```
+
+或用数字键选择候选：
+
+```text
+xainzai -> 删除 -> xianzai -> 1
+```
+
+期望：
+
+- 如果记事本可被 UI Automation 读取，`learning.log` 写入 learned 记录。
+- `list-events` 和 `list-rules` 能看到新规则。
+- 如果读取不到中文，日志应记录 skip，而不是生成错误规则。
+
+## 8. 发布前验证
+
+```powershell
+uv run python -m unittest discover -s tests
+uv run python -m ai_ime.settings_window --smoke
+uv build --no-sources
+```
+
+期望：
+
+- 所有测试通过。
+- 包构建成功。
+- `dist` 不应提交到 Git。

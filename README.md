@@ -1,177 +1,129 @@
 # AI IME
 
-AI IME is an experimental Windows/Rime helper for learning personal pinyin typo habits.
+AI IME 是一个面向 Windows + Rime/小狼毫的个人拼音纠错学习助手。它在后台观察用户的拼音误输入和修正过程，把稳定出现的错误习惯沉淀成本地规则，并写入 Rime 词典，让下一次误输入也能优先出现正确候选词。
 
-The first milestone is intentionally small: collect correction events, aggregate typo rules, and export Rime dictionary files that can make a mistyped pinyin code produce the intended Chinese candidate.
+当前状态：Alpha 原型。项目已经具备托盘程序、设置界面、Rime 写入、手动纠错、自动学习、模型通道配置和本地测试；发布安装包仍在规划中。
 
-Example:
+## 功能
 
-```text
-xainzai -> xianzai -> 现在
+- Windows 通知区域托盘程序，运行后在后台监听。
+- 本地 WebView 设置中心，支持模型、隐私、Rime、开机启动等配置。
+- 自动识别常见纠错链路：`错误拼音 -> 删除 -> 正确拼音 -> 空格/回车/数字候选键`。
+- 支持手动录入纠错：错误拼音、正确拼音、对应中文。
+- 支持 OpenAI 兼容接口、中转站、Ollama、本地 mock provider。
+- 支持把规则部署到小狼毫 Rime 用户目录，并尝试触发重新部署。
+- AI 分析按自适应间隔批处理，避免每次输入都调用模型。
+
+## 快速开始
+
+要求：
+
+- Windows 10/11。
+- 已安装 [uv](https://docs.astral.sh/uv/)。
+- 建议先安装小狼毫/Rime，并确认输入法本身可用。
+
+```powershell
+git clone <your-repo-url>
+cd ai-ime
+uv sync
+Copy-Item .env.example .env
+uv run python -m ai_ime setup
+uv run python run.py
 ```
 
-## Development
+也可以使用启动脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
+```
+
+启动后，Windows 右下角通知区域会出现 `AI IME` 图标。点击图标打开设置中心。
+
+更详细步骤见 [Windows 快速启动](docs/quickstart-windows.md)。
+
+## 开发命令
 
 ```powershell
 uv run python -m ai_ime --help
-uv run --no-editable ai-ime --help
+uv run python -m ai_ime setup --dry-run
+uv run python -m ai_ime doctor
 uv run python run.py
 uv run python run.py --status
 uv run python run.py --stop
-uv run --no-editable ai-ime-start
-uv run --no-editable ai-ime-tray
 uv run python -m unittest discover -s tests
+uv build --no-sources
 ```
 
-`run.py` and `ai-ime-start` start the Windows notification-area app in the background. `ai-ime-tray` runs the tray app in the current process for debugging. Because this repository is currently under a path with non-ASCII characters, prefer `uv run --no-editable ai-ime...` for console-script entry points.
-
-## MVP Workflow
+因为本仓库路径可能包含中文或空格，调试 console script 时可使用：
 
 ```powershell
-uv run python -m ai_ime --db .data/ai-ime.db init-db
-uv run python -m ai_ime --db .data/ai-ime.db doctor
-uv run python -m ai_ime --db .data/ai-ime.db add-event --wrong xainzai --correct xianzai --text 现在
-uv run python -m ai_ime --db .data/ai-ime.db detect-sequence --sequence "xainzai{backspace*7}xianzai{space}" --text 现在
-uv run python -m ai_ime --db .data/ai-ime.db list-events
-uv run python -m ai_ime --db .data/ai-ime.db analyze
-uv run python -m ai_ime --db .data/ai-ime.db analyze-ai --provider mock
-uv run python -m ai_ime --db .data/ai-ime.db list-rules
-uv run python -m ai_ime --db .data/ai-ime.db disable-rule 1
-uv run python -m ai_ime --db .data/ai-ime.db enable-rule 1
-uv run python -m ai_ime --db .data/ai-ime.db export-rime --out .data/rime
-```
-
-This writes an `ai_typo.dict.yaml` and a schema patch file into the output directory. Review and test those files before copying them into your Rime user data directory.
-
-After review, you can deploy into a Rime user directory:
-
-```powershell
-uv run python -m ai_ime --db .data/ai-ime.db deploy-rime --rime-dir "$env:APPDATA\Rime"
-```
-
-If an existing schema patch is present, `deploy-rime` writes a `.ai-ime.pending` patch instead of overwriting it unless you pass `--force-schema-patch`.
-
-## AI Providers
-
-The AI layer currently uses standard library HTTP calls, so no SDK dependency is required.
-
-Local secrets and provider defaults go in `.env`; use `.env.example` as the template.
-
-Local Ollama:
-
-```powershell
-uv run python -m ai_ime --db .data/ai-ime.db analyze-ai --provider ollama --model qwen2.5:7b
-```
-
-OpenAI-compatible endpoint or relay:
-
-```powershell
-$env:OPENAI_API_KEY = "..."
-uv run python -m ai_ime --db .data/ai-ime.db analyze-ai --provider openai-compatible --model gpt-4o-mini --base-url https://api.openai.com/v1
-```
-
-Cloud and relay providers should receive only the data you choose to send. The current MVP only sends stored correction events, not a full keyboard log.
-
-## Data Controls
-
-Rules can be disabled before export, deleted, or re-enabled:
-
-```powershell
-uv run python -m ai_ime --db .data/ai-ime.db list-rules
-uv run python -m ai_ime --db .data/ai-ime.db disable-rule 1
-uv run python -m ai_ime --db .data/ai-ime.db delete-rule 1 --yes
-```
-
-Correction events can also be cleared:
-
-```powershell
-uv run python -m ai_ime --db .data/ai-ime.db clear-events --yes
-```
-
-## Controlled Local Key Logging
-
-The first listener is explicit and time-limited. It is not a hidden background service.
-
-```powershell
-uv run python -m ai_ime listen --duration 30 --log-file .data/keylog.jsonl --i-understand
-```
-
-Use `ctrl+alt+shift+p` to stop early. The listener records local key names to a JSONL file; it does not infer committed Chinese text yet.
-
-To turn a local keylog into a correction event, provide the final committed text:
-
-```powershell
-uv run python -m ai_ime --db .data/ai-ime.db detect-log --log-file .data/keylog.jsonl --text 现在
-uv run python -m ai_ime clear-keylog --log-file .data/keylog.jsonl --yes
-```
-
-## Tray App
-
-Start the local app in the background:
-
-```powershell
-uv run python run.py
-```
-
-Check or stop the background app:
-
-```powershell
-uv run python run.py --status
-uv run python run.py --stop
-```
-
-If the icon is not immediately visible, check the Windows notification-area overflow menu.
-
-Or use the installed script entry:
-
-```powershell
-uv run --no-editable ai-ime-start
-```
-
-Run the tray app in the current process for debugging:
-
-```powershell
+uv run --no-editable ai-ime --help
+uv run --no-editable ai-ime-start --status
 uv run --no-editable ai-ime-tray
 ```
 
-The notification-area icon opens the settings window. Current settings include:
+## 使用验证
 
-- Listener enabled/paused
-- Record full local keylog
-- Allow sending full keylog
-- Start on Windows login
-- OpenAI-compatible and Ollama provider settings
-- Rime user directory and dictionary settings
-
-The settings window is a local `pywebview` desktop window backed by static HTML/CSS/JS in `ai_ime/ui/`. It does not open a browser tab; the page calls Python bridge methods for saving settings, testing providers, detecting Rime, and deploying the typo dictionary.
-
-The tray app uses Rime/小狼毫 as the IME engine. AI IME is a companion process that learns rules and writes Rime configuration; it is not a fork of 小狼毫 and does not replace 小狼毫's installer.
-
-## Automatic Learning
-
-When the tray listener is enabled, AI IME watches for this correction shape:
+自动学习推荐先在记事本中验证：
 
 ```text
-wrong-pinyin -> backspace/delete -> correct-pinyin -> space/enter
+xainzai -> 删除 -> xianzai -> 空格
 ```
 
-Candidate number selection is also treated as a confirm key, so `1` through `9` on the main keyboard and common numpad names can trigger learning after the corrected pinyin. After the confirm key, it reads the focused Windows text control through UI Automation, compares the text before and after commit, and stores a rule only if it can extract newly inserted Chinese text. If focused text cannot be read, the correction is skipped instead of creating a risky rule.
-
-To verify with 小狼毫:
+如果当前应用能通过 Windows UI Automation 暴露文本内容，AI IME 会读取提交后的中文并记录规则。也可以在设置中心的“纠错”页面手动录入：
 
 ```text
-xainzai -> erase it -> xianzai -> space
+错误拼音：xainzai
+正确拼音：xianzai
+对应中文：现在
 ```
 
-Then check:
+随后检查：
 
 ```powershell
 uv run python -m ai_ime list-events
 uv run python -m ai_ime list-rules
 ```
 
-If automatic deploy is enabled, AI IME writes the updated `ai_typo` dictionary and attempts to run 小狼毫 redeploy. Some applications do not expose focused text through UI Automation; Notepad is the recommended first manual test target.
+## 隐私
 
-The settings window also has a manual correction page. Enter the wrong pinyin, the corrected pinyin, and the Chinese text to write a local event and rule immediately.
+这个项目会处理键盘输入数据，默认只在本机工作。完整键盘日志是否记录、是否上传给云端/中转模型，由设置中心控制。Ollama 等本地模型可使用完整日志作为上下文；OpenAI 兼容接口默认不发送完整日志，除非用户明确开启。
 
-AI analysis is batched in the background instead of running after every correction. The scheduler starts around 30 minutes, shortens to 10 minutes for heavy typing, and backs off through 1 hour, 2 hours, 5 hours, 8 hours, and 12 hours when there is little or no activity. Cloud and relay providers receive keyboard logs only when `send_full_keylog` is enabled; local Ollama may receive keyboard-log context by default.
+发布前请完整阅读 [隐私说明](docs/privacy.md)。
+
+## 架构
+
+核心模块：
+
+- `ai_ime/tray.py`：托盘进程和后台监听生命周期。
+- `ai_ime/settings_window.py`、`ai_ime/ui/`：本地 WebView 设置中心。
+- `ai_ime/correction/`：按键序列归一化和纠错检测。
+- `ai_ime/learning.py`：纠错事件落库、规则聚合、Rime 自动部署。
+- `ai_ime/analysis_scheduler.py`：自适应 AI 分析调度。
+- `ai_ime/providers/`：模型供应商适配层。
+- `ai_ime/rime/`：Rime 文件生成、部署、回滚、小狼毫 redeploy。
+
+更多说明见 [架构文档](docs/architecture.md)。
+
+## 打包与发布
+
+当前建议路线：
+
+1. GitHub 源码预览版：用户使用 `uv` 运行。
+2. Alpha zip：使用 PyInstaller 产出 Windows one-folder 包。
+3. 正式 Release：安装器、二进制签名、卸载清理、自动更新。
+
+发布流程见 [Release 指南](docs/release.md)。
+
+## 贡献
+
+请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。提交 PR 前至少运行：
+
+```powershell
+uv run python -m unittest discover -s tests
+uv build --no-sources
+```
+
+## License
+
+MIT License. See [LICENSE](LICENSE).
