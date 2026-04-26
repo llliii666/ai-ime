@@ -40,6 +40,8 @@ class SettingsWindowTests(unittest.TestCase):
             self.assertNotIn("renderModelSummary", html)
             self.assertIn("grid-template-rows: auto minmax(0, 1fr) auto", html)
             self.assertIn("overflow-y: auto", html)
+            self.assertIn("z-index: 2000", html)
+            self.assertIn("transform: translate(0, 0)", html)
             self.assertIn("<script>", html)
             self.assertNotIn('href="./settings.css"', html)
             self.assertNotIn('src="./settings.js"', html)
