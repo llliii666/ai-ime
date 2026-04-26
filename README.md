@@ -143,4 +143,6 @@ The notification-area icon opens the settings window. Current settings include:
 - OpenAI-compatible and Ollama provider settings
 - Rime user directory and dictionary settings
 
+The settings window is a local `pywebview` desktop window backed by static HTML/CSS/JS in `ai_ime/ui/`. It does not open a browser tab; the page calls Python bridge methods for saving settings, testing providers, detecting Rime, and deploying the typo dictionary.
+
 The tray app uses Rime/小狼毫 as the IME engine. AI IME is a companion process that learns rules and writes Rime configuration; it is not a fork of 小狼毫 and does not replace 小狼毫's installer.

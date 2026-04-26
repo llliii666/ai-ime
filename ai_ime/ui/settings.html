@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI IME 设置</title>
+    <link rel="stylesheet" href="./settings.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="设置导航">
+        <div class="brand">
+          <div class="brand-mark">AI</div>
+          <div>
+            <strong>AI IME</strong>
+            <span>小狼毫智能纠错</span>
+          </div>
+        </div>
+        <nav class="nav-list">
+          <button class="nav-item active" data-page="general">常规</button>
+          <button class="nav-item" data-page="privacy">隐私</button>
+          <button class="nav-item" data-page="model">模型</button>
+          <button class="nav-item" data-page="rime">输入法</button>
+        </nav>
+        <div class="sidebar-status">
+          <span>配置文件</span>
+          <strong id="settingsPath">读取中</strong>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">本地设置中心</p>
+            <h1 id="pageTitle">常规</h1>
+          </div>
+          <div class="topbar-pills">
+            <span class="pill" id="listenerPill">监听状态</span>
+            <span class="pill accent" id="providerPill">模型通道</span>
+          </div>
+        </header>
+
+        <section class="page active" id="general" data-title="常规">
+          <div class="metric-grid">
+            <div class="metric">
+              <span>纠错事件</span>
+              <strong id="eventsCount">0</strong>
+            </div>
+            <div class="metric">
+              <span>启用规则</span>
+              <strong id="enabledRulesCount">0</strong>
+            </div>
+            <div class="metric">
+              <span>规则总数</span>
+              <strong id="rulesCount">0</strong>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>后台运行</h2>
+              <span>托盘进程关闭后生效</span>
+            </div>
+            <label class="switch-row">
+              <span>
+                <strong>启用键盘监听</strong>
+                <small>记录输入纠错过程，用于生成个人规则。</small>
+              </span>
+              <input id="listener_enabled" type="checkbox" />
+            </label>
+            <label class="switch-row">
+              <span>
+                <strong>开机自启动</strong>
+                <small>登录 Windows 后自动启动托盘程序。</small>
+              </span>
+              <input id="start_on_login" type="checkbox" />
+            </label>
+            <div class="field-row">
+              <label for="keylog_file">键盘日志文件</label>
+              <div class="path-control">
+                <input id="keylog_file" type="text" />
+                <button class="secondary" data-browse="file" data-target="keylog_file">浏览</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="privacy" data-title="隐私">
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>键入数据</h2>
+              <span>本地记录与模型上传边界</span>
+            </div>
+            <label class="switch-row">
+              <span>
+                <strong>记录完整本地键盘日志</strong>
+                <small>关闭后只保留已经识别出的纠错事件。</small>
+              </span>
+              <input id="record_full_keylog" type="checkbox" />
+            </label>
+            <label class="switch-row">
+              <span>
+                <strong>允许云端/中转模型接收完整键入日志</strong>
+                <small>本地模型不受该开关限制，云端模型默认不发送完整日志。</small>
+              </span>
+              <input id="send_full_keylog" type="checkbox" />
+            </label>
+          </div>
+          <div class="notice">
+            <strong>当前策略</strong>
+            <span>Ollama 等本地模型可使用完整日志；OpenAI 兼容接口是否上传完整日志由上方开关控制。</span>
+          </div>
+        </section>
+
+        <section class="page" id="model" data-title="模型">
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>通道</h2>
+              <span>支持中转站、OpenAI 兼容接口和本地 Ollama</span>
+            </div>
+            <div class="field-row">
+              <label for="provider">当前通道</label>
+              <select id="provider">
+                <option value="openai-compatible">OpenAI 兼容接口</option>
+                <option value="ollama">Ollama 本地模型</option>
+                <option value="mock">本地模拟</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="split-panels">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>OpenAI 兼容接口</h2>
+                <span id="apiKeyState">未读取</span>
+              </div>
+              <div class="field-row">
+                <label for="openai_base_url">Base URL</label>
+                <input id="openai_base_url" type="text" spellcheck="false" />
+              </div>
+              <div class="field-row">
+                <label for="openai_model">模型</label>
+                <input id="openai_model" type="text" spellcheck="false" />
+              </div>
+              <div class="field-row">
+                <label for="apiKey">API Key</label>
+                <input id="apiKey" type="password" placeholder="留空则继续使用已保存密钥" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Ollama 本地模型</h2>
+                <span>localhost</span>
+              </div>
+              <div class="field-row">
+                <label for="ollama_base_url">Base URL</label>
+                <input id="ollama_base_url" type="text" spellcheck="false" />
+              </div>
+              <div class="field-row">
+                <label for="ollama_model">模型</label>
+                <input id="ollama_model" type="text" spellcheck="false" />
+              </div>
+              <button class="secondary inline-action" id="testProvider">测试模型连接</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="rime" data-title="输入法">
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>小狼毫 / Rime</h2>
+              <span>以小狼毫为主体，AI IME 写入独立纠错词典</span>
+            </div>
+            <div class="field-row">
+              <label for="rime_dir">Rime 用户目录</label>
+              <div class="path-control">
+                <input id="rime_dir" type="text" />
+                <button class="secondary" data-browse="directory" data-target="rime_dir">浏览</button>
+              </div>
+            </div>
+            <div class="field-row compact">
+              <label for="rime_schema">方案 ID</label>
+              <input id="rime_schema" type="text" />
+            </div>
+            <div class="field-row compact">
+              <label for="rime_dictionary">纠错词典</label>
+              <input id="rime_dictionary" type="text" />
+            </div>
+            <div class="field-row compact">
+              <label for="rime_base_dictionary">可选导入词典</label>
+              <input id="rime_base_dictionary" type="text" />
+            </div>
+            <div class="button-row">
+              <button class="secondary" id="detectRime">自动检测 Rime</button>
+              <button class="secondary" id="openRimeDir">打开目录</button>
+              <button class="primary" id="deployRime">部署纠错词典</button>
+            </div>
+          </div>
+          <div class="notice subdued">
+            <strong>接入方式</strong>
+            <span>AI IME 不替换小狼毫安装器和输入面板，只为当前方案增加一个高优先级纠错 translator。</span>
+          </div>
+        </section>
+
+        <footer class="actionbar">
+          <div id="statusText" class="status-text">正在读取配置</div>
+          <button class="secondary" id="reloadState">重新读取</button>
+          <button class="primary" id="saveSettings">保存设置</button>
+        </footer>
+      </section>
+    </main>
+
+    <script src="./settings.js"></script>
+  </body>
+</html>

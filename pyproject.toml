@@ -8,6 +8,7 @@ dependencies = [
     "keyboard>=0.13.5",
     "pillow>=12.2.0",
     "pystray>=0.19.5",
+    "pywebview>=6.2.1",
 ]
 
 [project.scripts]
