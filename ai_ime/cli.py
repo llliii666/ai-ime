@@ -19,6 +19,7 @@ from .db import (
     set_rule_enabled,
     upsert_rules,
 )
+from .doctor import format_checks, has_error, run_checks
 from .listener import ListenerError, keylog_to_sequence, run_keyboard_listener
 from .models import CorrectionEvent
 from .providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
@@ -47,6 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_parser = subparsers.add_parser("init-db", help="Create or migrate the SQLite database.")
     init_parser.set_defaults(handler=handle_init_db)
+
+    doctor_parser = subparsers.add_parser("doctor", help="Check local AI IME environment.")
+    doctor_parser.set_defaults(handler=handle_doctor)
 
     add_parser = subparsers.add_parser("add-event", help="Add one correction event.")
     add_parser.add_argument("--wrong", required=True, help="Mistyped pinyin, e.g. xainzai.")
@@ -173,6 +177,12 @@ def handle_init_db(args: argparse.Namespace) -> int:
         init_db(conn)
     print(f"Initialized database: {args.db}")
     return 0
+
+
+def handle_doctor(args: argparse.Namespace) -> int:
+    results = run_checks(db_path=args.db)
+    print(format_checks(results))
+    return 1 if has_error(results) else 0
 
 
 def handle_add_event(args: argparse.Namespace) -> int:
