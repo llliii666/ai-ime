@@ -8,9 +8,10 @@ AI IME 是一个面向 Windows + Rime/小狼毫的个人拼音纠错学习助手
 
 - Windows 通知区域托盘程序，运行后在后台监听。
 - 本地 WebView 设置中心，支持模型、隐私、Rime、开机启动等配置。
+- 设置中心可查看纠错事件和启用规则，以 `错误拼音 -> 正确拼音 -> 正确汉字` 三元组展示，并支持按时间或拼音排序。
 - 自动识别常见纠错链路：`错误拼音 -> 删除 -> 正确拼音 -> 空格/回车/数字候选键`。
 - 支持手动录入纠错：错误拼音、正确拼音、对应中文。
-- 支持 OpenAI 兼容接口、中转站、Ollama、本地 mock provider。
+- 支持 OpenAI 兼容接口、中转站、OpenRouter、DeepSeek、Moonshot、SiliconFlow、智谱、Groq、LM Studio、Ollama、本地 mock provider。
 - 支持把规则部署到小狼毫 Rime 用户目录，并尝试触发重新部署。
 - AI 分析按自适应间隔批处理，避免每次输入都调用模型。
 
@@ -88,6 +89,8 @@ uv run python -m ai_ime list-rules
 ## 隐私
 
 这个项目会处理键盘输入数据，默认只在本机工作。完整键盘日志是否记录、是否上传给云端/中转模型，由设置中心控制。Ollama 等本地模型可使用完整日志作为上下文；OpenAI 兼容接口默认不发送完整日志，除非用户明确开启。
+
+AI 分析不是直接裸发日志。程序会把纠错事件和可选键盘日志整理成 JSON，使用系统提示词要求模型只返回标准规则 JSON；OpenAI 兼容接口会请求 JSON mode，Ollama 会请求 `format=json`，模型结果还会经过本地 schema 校验后才写入规则。
 
 发布前请完整阅读 [隐私说明](docs/privacy.md)。
 

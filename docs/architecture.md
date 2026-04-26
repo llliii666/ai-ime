@@ -33,6 +33,16 @@ flowchart LR
 - `ai_ime/settings_window.py`、`ai_ime/ui/`：本地设置界面。
 - `ai_ime/setup_wizard.py`：首次启动初始化和环境检查。
 
+## 模型分析协议
+
+AI 分析链路分三层：
+
+1. `ai_ime/providers/prompt.py` 把纠错事件和可选键盘日志整理成 JSON 用户消息，并用系统提示词要求模型只返回规则 JSON。
+2. `OpenAICompatibleProvider` 走 `/chat/completions`，默认附带 `response_format={"type":"json_object"}`；`OllamaProvider` 走 `/api/chat`，默认附带 `format="json"`。
+3. `ai_ime/providers/schema.py` 解析、校验并归一化模型返回结果，只接受 `rules` 数组中的标准字段。
+
+因此模型不会直接决定数据库结构；它只能建议规则，最终写入前必须通过本地 schema。
+
 ## 可扩展点
 
 新增模型通道：
@@ -40,6 +50,8 @@ flowchart LR
 1. 在 `ai_ime/providers/` 下实现 `AIProvider`。
 2. 在 `ai_ime/learning.py` 和 `ai_ime/ui_api.py` 的 provider factory 中注册。
 3. 为请求、解析、错误处理添加测试。
+
+如果新通道兼容 OpenAI Chat Completions，优先只在 `ai_ime/providers/presets.py` 添加接口预设，不要新增 SDK 依赖。
 
 新增输入法后端：
 

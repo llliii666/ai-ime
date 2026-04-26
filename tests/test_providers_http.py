@@ -95,6 +95,8 @@ class ProviderHttpTests(unittest.TestCase):
         self.assertEqual(rules[0].provider, "openai-compatible")
         self.assertEqual(RecordingHandler.requests[0]["path"], "/v1/chat/completions")
         self.assertEqual(RecordingHandler.requests[0]["payload"]["response_format"], {"type": "json_object"})
+        self.assertIn("Return only one JSON object", RecordingHandler.requests[0]["payload"]["messages"][0]["content"])
+        self.assertIn('"events"', RecordingHandler.requests[0]["payload"]["messages"][1]["content"])
 
     def test_ollama_provider_posts_native_chat(self) -> None:
         provider = OllamaProvider(model="test-model", base_url=self.base_url)
