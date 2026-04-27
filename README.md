@@ -164,6 +164,10 @@ uv build --no-sources
 - [架构说明](docs/architecture.md)
 - [Release 指南](docs/release.md)
 
+## 生成说明
+
+代码由 GPT-5.5 生成。
+
 ## License
 
 MIT License. See [LICENSE](LICENSE).
