@@ -1,80 +1,68 @@
 # AI IME
 
-AI IME 是一个面向 Windows + Rime/小狼毫的个人拼音纠错学习助手。它在后台观察用户的拼音误输入和修正过程，把稳定出现的错误习惯沉淀成本地规则，并写入 Rime 词典，让下一次误输入也能优先出现正确候选词。
+AI IME 是一个面向 Windows + 小狼毫/Rime 的拼音纠错学习助手。
 
-当前状态：Alpha 原型。项目已经具备托盘程序、设置界面、Rime 写入、手动纠错、自动学习、模型通道配置和本地测试；发布安装包仍在规划中。
+它不是语音输入，也不会一次生成一大段文字。它的目标很窄：观察你经常打错的拼音，例如把 `xianzai` 误打成 `xainzai`，在你改正后学习这条习惯，下次输入错误拼音时让小狼毫优先给出正确候选词。
 
-## 功能
+当前状态：Alpha。适合愿意尝鲜的 Windows 用户；正式安装包仍在建设中。
 
-- Windows 通知区域托盘程序，运行后在后台监听。
-- 本地 WebView 设置中心，支持模型、隐私、Rime、开机启动等配置。
-- 设置中心可查看纠错事件和启用规则，以 `错误拼音 -> 正确拼音 -> 正确汉字` 三元组展示，并支持按时间或拼音排序。
-- 自动识别常见纠错链路：`错误拼音 -> 删除 -> 正确拼音 -> 空格/回车/数字候选键`。
-- 支持手动录入纠错：错误拼音、正确拼音、对应中文。
-- 模型设置按“接口类型 -> 提供商/中转商 -> 连接测试 -> 模型选择”组织；连接成功后会尝试拉取模型列表。
-- 支持 OpenAI 兼容接口、中转站、OpenRouter、DeepSeek、Moonshot、SiliconFlow、智谱、Groq、LM Studio、Ollama、本地 mock provider。
-- 支持把规则部署到小狼毫 Rime 用户目录，并尝试触发重新部署。
-- AI 分析按自适应间隔批处理，避免每次输入都调用模型。
+## 适合谁
 
-## 快速开始
+- 你主要用拼音输入中文。
+- 你不想要“AI 帮你写一段话”，只想要更懂你输入习惯的纠错。
+- 你愿意使用小狼毫/Rime 作为输入法底座。
 
-要求：
+AI IME 目前不能直接改造微软拼音、搜狗输入法等闭源输入法。它通过写入小狼毫/Rime 的本地词典和配置来影响候选词。
 
-- Windows 10/11。
-- 已安装 [uv](https://docs.astral.sh/uv/)。
-- 建议先安装小狼毫/Rime，并确认输入法本身可用。
+## 最简单开始
+
+下载源码 zip 或 clone 仓库后，先运行根目录里的：
+
+```text
+START_HERE.cmd
+```
+
+这个入口会自动执行：
+
+1. 检查是否安装 `uv`。
+2. 安装 Python 依赖到本项目的 `.venv`。
+3. 初始化本地设置、数据库和私有 `.env` 文件。
+4. 检测小狼毫/Rime。
+5. 创建桌面快捷方式。
+6. 启动右下角托盘程序。
+
+如果没有安装小狼毫，脚本会用中文提示，并提供官方下载页或 winget 安装方式。AI IME 可以先启动设置界面，但没有小狼毫时不会改变输入法候选词。
+
+## 已经会命令行
 
 ```powershell
 git clone <your-repo-url>
 cd ai-ime
-uv sync
-Copy-Item .env.example .env
-uv run python -m ai_ime setup
-uv run python -m ai_ime create-shortcut
-uv run python run.py
-```
-
-也可以使用启动脚本：
-
-```powershell
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
 ```
 
-启动后，Windows 右下角通知区域会出现 `AI IME` 图标。点击图标打开设置中心。
-
-更详细步骤见 [Windows 快速启动](docs/quickstart-windows.md)。
-
-## 开发命令
+常用命令：
 
 ```powershell
-uv run python -m ai_ime --help
-uv run python -m ai_ime setup --dry-run
-uv run python -m ai_ime doctor
-uv run python -m ai_ime create-shortcut
 uv run python run.py
 uv run python run.py --status
 uv run python run.py --stop
-uv run python -m unittest discover -s tests
-uv build --no-sources
+uv run python -m ai_ime doctor
 ```
 
-因为本仓库路径可能包含中文或空格，调试 console script 时可使用：
+## 第一次打开后做什么
 
-```powershell
-uv run --no-editable ai-ime --help
-uv run --no-editable ai-ime-start --status
-uv run --no-editable ai-ime-tray
-```
+1. 点击 Windows 右下角通知区域里的 `AI IME` 图标。
+2. 在“模型”页面配置 OpenAI 兼容接口、Ollama 或其他供应商。
+3. 在“输入法”页面确认 Rime 用户目录，点击“部署纠错词典”。
+4. 从小狼毫菜单执行一次“重新部署”。
+5. 在“纠错”页面手动录入一条规则，或直接开始打字让它学习。
 
-## 使用验证
+`.env` 文件只是本地私有配置文件，用来保存模型地址和 API Key。你不需要先手动编辑它；在设置界面保存模型配置后，程序会自动写入 `.env`。
 
-自动学习推荐先在记事本中验证：
+## 验证一条纠错
 
-```text
-xainzai -> 删除 -> xianzai -> 空格
-```
-
-如果当前应用能通过 Windows UI Automation 暴露文本内容，AI IME 会读取提交后的中文并记录规则。也可以在设置中心的“纠错”页面手动录入：
+手动录入最稳定：
 
 ```text
 错误拼音：xainzai
@@ -82,53 +70,75 @@ xainzai -> 删除 -> xianzai -> 空格
 对应中文：现在
 ```
 
-随后检查：
+部署到小狼毫后，输入 `xainzai`，候选词中应该能看到“现在”。
 
-```powershell
-uv run python -m ai_ime list-events
-uv run python -m ai_ime list-rules
+自动学习推荐在记事本里测试：
+
+```text
+xainzai -> 选中错误词 -> 删除 -> xianzai -> 空格/回车/数字键选中“现在”
 ```
 
-## 隐私
+如果小狼毫 Lua 日志已部署，AI IME 会记录候选词上屏内容，模型能看到“错误拼音、错误候选词、正确拼音、正确候选词”的链路。
 
-这个项目会处理键盘输入数据，默认只在本机工作。完整键盘日志是否记录、是否上传给云端/中转模型，由设置中心控制。Ollama 等本地模型可使用完整日志作为上下文；OpenAI 兼容接口默认不发送完整日志，除非用户明确开启。
+## 文件位置
 
-AI 分析不是直接裸发日志。程序会把纠错事件和可选键盘日志整理成 JSON，使用系统提示词要求模型只返回标准规则 JSON；OpenAI 兼容接口会请求 JSON mode，并通过 `/models` 测试和拉取模型列表；Ollama 会请求 `format=json`，并通过 `/api/tags` 拉取本地模型。模型结果还会经过本地 schema 校验后才写入规则。
+默认数据目录：
 
-发布前请完整阅读 [隐私说明](docs/privacy.md)。
+```text
+%LOCALAPPDATA%\AIIME
+```
 
-## 架构
+主要文件：
 
-核心模块：
+- `settings.json`：界面设置。
+- `ai-ime.db`：纠错事件和规则。
+- `keylog.jsonl`：键盘日志和 Rime 候选上屏记录。
+- `learning.log`：学习和部署日志。
+- `webview/`：设置窗口缓存。
 
-- `ai_ime/tray.py`：托盘进程和后台监听生命周期。
-- `ai_ime/settings_window.py`、`ai_ime/ui/`：本地 WebView 设置中心。
-- `ai_ime/correction/`：按键序列归一化和纠错检测。
-- `ai_ime/learning.py`：纠错事件落库、规则聚合、Rime 自动部署。
-- `ai_ime/analysis_scheduler.py`：自适应 AI 分析调度。
-- `ai_ime/providers/`：模型供应商适配层。
-- `ai_ime/rime/`：Rime 文件生成、部署、回滚、小狼毫 redeploy。
+Rime 文件会写入小狼毫用户目录，通常是：
 
-更多说明见 [架构文档](docs/architecture.md)。
+```text
+%APPDATA%\Rime
+```
 
-## 打包与发布
+AI IME 会写入 `ai_typo.dict.yaml`、`ai_typo.schema.yaml`、`<当前方案>.custom.yaml` 和 `lua/ai_ime_logger.lua`，并在 `.ai-ime-backups/` 中备份被改动的文件。
 
-当前建议路线：
+## 隐私默认值
 
-1. GitHub 源码预览版：用户使用 `uv` 运行。
-2. Alpha zip：使用 PyInstaller 产出 Windows one-folder 包。
-3. 正式 Release：安装器、二进制签名、卸载清理、自动更新。
+- 本地监听默认开启。
+- 本地完整 keylog 默认开启，用于学习和排查。
+- 完整 keylog 默认不会上传到云端模型。
+- Ollama 等本地模型可以使用完整日志。
+- 云端/中转模型只有在你明确开启“发送完整键入日志”后才会收到完整 keylog。
 
-发布流程见 [Release 指南](docs/release.md)。
+模型分析会把纠错事件整理成 JSON，并要求模型只返回标准规则 JSON。返回结果会经过本地 schema 校验后才写入规则。
 
-## 贡献
+## 发布状态
 
-请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。提交 PR 前至少运行：
+当前还没有正式安装器。仓库已经提供：
+
+- 源码运行入口：`START_HERE.cmd`
+- 开发/体验脚本：`scripts/bootstrap.ps1`
+- Windows one-folder 打包脚本：`scripts/build-release.ps1`
+- GitHub Actions CI
+
+后续正式 release 目标包括：Windows 安装器、开始菜单快捷方式、卸载器、用户数据保留/删除选项、签名和自动更新。
+
+## 开发
 
 ```powershell
 uv run python -m unittest discover -s tests
+uv run python -m ai_ime.settings_window --smoke
 uv build --no-sources
 ```
+
+更多细节见：
+
+- [Windows 快速开始](docs/quickstart-windows.md)
+- [隐私说明](docs/privacy.md)
+- [架构说明](docs/architecture.md)
+- [Release 指南](docs/release.md)
 
 ## License
 

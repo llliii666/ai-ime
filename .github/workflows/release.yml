@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example v0.1.0"
+        required: true
+        default: "v0.1.0"
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  windows-release:
+    name: Build Windows release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.11
+
+      - name: Build release artifact
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          if (-not $version) {
+            $version = "${{ github.ref_name }}"
+          }
+          powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1 -Version $version
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-ime-windows-release
+          path: |
+            dist/AI-IME-*-windows.zip
+            dist/*.whl
+            dist/*.tar.gz
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/AI-IME-*-windows.zip
+            dist/*.whl
+            dist/*.tar.gz

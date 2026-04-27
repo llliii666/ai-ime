@@ -1,82 +1,88 @@
-# Windows 快速启动
+# Windows 快速开始
 
-这份文档面向第一次 clone 项目的用户，目标是在本机跑起托盘程序并完成一条纠错规则验证。
+这份文档面向第一次使用 AI IME 的 Windows 用户。
 
-## 1. 准备环境
+AI IME 不是输入法本体，也不是语音输入。它是一个后台助手：学习你的拼音误输入习惯，然后把纠错规则写入小狼毫/Rime，让候选词更符合你的输入习惯。
 
-安装：
+## 1. 推荐路径：双击入口
 
-- Windows 10/11。
-- uv。
-- 小狼毫/Rime。
+下载源码 zip 并解压后，双击根目录：
 
-确认小狼毫能正常输入中文后再接入 AI IME。AI IME 不是输入法本体，而是一个 companion app：它写入 Rime 用户目录中的纠错词典和 schema patch。
+```text
+START_HERE.cmd
+```
 
-## 2. 初始化项目
+脚本会自动完成：
+
+- 检查 `uv`。
+- 安装项目依赖。
+- 初始化 `%LOCALAPPDATA%\AIIME` 下的数据文件。
+- 初始化项目根目录 `.env`。
+- 检测小狼毫/Rime。
+- 创建桌面快捷方式。
+- 启动右下角托盘程序。
+
+如果没有安装 `uv`，脚本会提示安装地址。安装 uv 后重新双击 `START_HERE.cmd` 即可。
+
+## 2. 小狼毫/Rime 是必须的吗
+
+如果你只想打开设置界面或查看项目，可以先不安装。
+
+如果你希望输入 `xainzai` 时小狼毫候选词里出现“现在”，就必须安装小狼毫/Rime。AI IME 目前通过 Rime 词典和 schema patch 改变候选词，不能直接改造微软拼音、搜狗输入法等闭源输入法。
+
+小狼毫安装方式：
+
+- 官方下载页：<https://rime.im/download/>
+- winget：`winget install -e --id Rime.Weasel`
+
+安装小狼毫后，打开 AI IME 设置窗口，在“输入法”页点击“自动检测 Rime”。
+
+## 3. 命令行路径
+
+适合开发者或愿意看命令行的用户：
 
 ```powershell
 git clone <your-repo-url>
 cd ai-ime
-uv sync
-Copy-Item .env.example .env
-uv run python -m ai_ime setup
-uv run python -m ai_ime create-shortcut
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
 ```
 
-如果只想检查会发生什么：
+自定义桌面快捷方式位置：
 
 ```powershell
-uv run python -m ai_ime setup --dry-run
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -ShortcutPath "$env:USERPROFILE\Desktop\AI IME.lnk"
 ```
 
-诊断环境：
+只初始化、不启动：
 
 ```powershell
-uv run python -m ai_ime doctor
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -NoStart
 ```
 
-`env` 如果显示 WARN，通常是 `.env` 里还没有填写真实模型 key。只验证本地纠错时可以先不配置模型。
-
-## 3. 启动托盘程序
-
-初始化后桌面会出现 `AI IME` 快捷方式，之后可以直接双击启动托盘程序。也可以继续使用命令行启动：
+## 4. 启动和停止
 
 ```powershell
 uv run python run.py
-```
-
-查看或停止：
-
-```powershell
 uv run python run.py --status
 uv run python run.py --stop
 ```
 
-如果没看到图标，先检查 Windows 通知区域的隐藏图标菜单。
+启动后，Windows 右下角通知区域会出现 `AI IME` 图标。图标可能在“隐藏图标”菜单里。
 
-## 4. 配置模型
+## 5. 第一次设置
 
-打开托盘图标的设置窗口，在“模型”页面选择：
+打开托盘设置窗口后：
 
-- `接口类型`：默认 OpenAI 兼容，也可切到 Ollama 本地或本地模拟。
-- `提供商`：可快速填入 OpenAI、OpenRouter、DeepSeek、Moonshot、SiliconFlow、智谱、Groq、LM Studio 等常见接口；自定义中转商会留空 Base URL，按提示填写。
-- `测试连接并获取模型`：连接成功后会显示模型下拉菜单；失败时会显示红色错误原因。
-- `本地模拟`：只用于开发和测试。
+1. “模型”页：选择 OpenAI 兼容接口、Ollama、本地模拟等提供商，填写 Base URL 和 API Key，点击测试连接。
+2. “隐私”页：确认是否记录完整 keylog、是否允许上传完整 keylog。
+3. “输入法”页：检测 Rime 用户目录，点击“部署纠错词典”。
+4. 从小狼毫菜单执行一次“重新部署”。
 
-云端/中转模型默认不会收到完整键盘日志，除非在“隐私”页面开启。
+`.env` 文件只是本地私有配置文件。你不需要手动编辑它；设置界面保存模型配置后会自动写入。
 
-## 5. 验证纠错
+## 6. 验证纠错
 
-推荐在记事本中测试：
-
-```text
-xainzai
-删除
-xianzai
-空格
-```
-
-如果自动识别失败，可以在设置中心“纠错”页面手动添加：
+最稳的验证方式是在“纠错”页手动添加：
 
 ```text
 错误拼音：xainzai
@@ -84,37 +90,42 @@ xianzai
 对应中文：现在
 ```
 
-检查记录：
+然后部署到 Rime，重新部署小狼毫，输入：
 
-```powershell
-uv run python -m ai_ime list-events
-uv run python -m ai_ime list-rules
+```text
+xainzai
 ```
 
-也可以在设置中心“记录”页面查看三元组明细，并按时间或拼音排序。
+候选词中应该能看到“现在”。
 
-## 6. 部署到小狼毫
+自动学习可以在记事本里测试：
 
-设置中心“输入法”页面可以自动检测 Rime 目录并部署纠错词典。命令行也可以执行：
-
-```powershell
-uv run python -m ai_ime deploy-rime --rime-dir "$env:APPDATA\Rime"
+```text
+xainzai -> 选择错误候选词 -> 删除 -> xianzai -> 空格/回车/数字键选择“现在”
 ```
 
-部署后需要小狼毫重新部署一次。如果自动 redeploy 没成功，可手动从小狼毫菜单执行“重新部署”。
+如果已经部署 Rime Lua 语义日志，`keylog.jsonl` 中会出现 `source: rime-lua`、`role: rime_commit`、`candidate_text`、`committed_text` 等字段。
 
-## 常见问题
+## 7. 文件位置
 
-- 某些应用读不到提交后的中文：这是 Windows UI Automation 暴露能力限制，先用记事本验证。
-- 托盘图标不显示：查看通知区域隐藏图标，或运行 `uv run --no-editable ai-ime-tray` 前台调试。
-- 模型连接失败：确认 `.env` 的 Base URL、模型名和 API Key。
-- 输入法候选没变化：确认 Rime schema 是当前正在使用的方案，并重新部署小狼毫。
+默认应用数据目录：
 
-## 小狼毫语义日志适配
+```text
+%LOCALAPPDATA%\AIIME
+```
 
-部署 Rime 时，AI IME 现在会额外写入：
+Rime 用户目录通常是：
 
-- `%APPDATA%\Rime\lua\ai_ime_logger.lua`：Rime 内部 Lua 插件，用来记录候选词上屏事件。
-- `%APPDATA%\Rime\<schema>.custom.yaml`：注册 `lua_processor@*ai_ime_logger` 和 `table_translator@ai_typo`。
+```text
+%APPDATA%\Rime
+```
 
-完成部署后必须执行一次“小狼毫重新部署”。重新部署后，使用小狼毫输入并选择候选词时，`keylog.jsonl` 中应该出现 `source: rime-lua`、`role: rime_commit`、`committed_text`、`candidate_text` 等字段。这样模型可以看到“错误拼音 -> 错误候选 -> 删除 -> 正确拼音 -> 正确候选”的完整语义链路。
+如果你安装小狼毫时自定义了用户数据目录，请在 AI IME 设置窗口的“输入法”页手动选择。
+
+## 8. 常见问题
+
+- 看不到托盘图标：检查 Windows 右下角隐藏图标菜单。
+- 模型配置为什么还会有 `.env`：`.env` 是本地私有保存位置，设置界面会自动写入。
+- 没安装小狼毫能用吗：能打开 AI IME，但不能影响候选词。
+- 安装了小狼毫但检测不到：在“输入法”页手动选择 Rime 用户目录。
+- 候选词没变化：确认已部署纠错词典，并从小狼毫菜单执行“重新部署”。
