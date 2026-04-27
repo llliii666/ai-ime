@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from ai_ime.listener import KeyLogEntry
-from ai_ime.models import CorrectionEvent, LearnedRule
+from ai_ime.models import CorrectionEvent, LearnedRule, ProviderAnalysis
 
 
 class ProviderError(RuntimeError):
@@ -16,5 +16,6 @@ class AIProvider(ABC):
         self,
         events: list[CorrectionEvent],
         keylog_entries: list[KeyLogEntry] | None = None,
-    ) -> list[LearnedRule]:
+        existing_rules: list[LearnedRule] | None = None,
+    ) -> ProviderAnalysis:
         """Analyze correction events and return learned rules."""

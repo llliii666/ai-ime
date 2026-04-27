@@ -15,9 +15,9 @@ from ai_ime.analysis_scheduler import (
     read_keylog_entries_since,
     should_send_keylog_entries,
 )
-from ai_ime.db import connect, init_db, insert_event
+from ai_ime.db import connect, init_db, insert_event, list_rules, upsert_rules
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
-from ai_ime.models import CorrectionEvent, LearnedRule
+from ai_ime.models import CorrectionEvent, LearnedRule, ProviderAnalysis, RuleAuditFinding
 from ai_ime.settings import AppSettings
 
 
@@ -393,6 +393,129 @@ class AnalysisSchedulerTests(unittest.TestCase):
             self.assertEqual(result.rejected_rules, 1)
             self.assertEqual(result.rules[0].wrong_pinyin, "xainzai")
             self.assertEqual(result.rejected_rule_items[0].wrong_pinyin, "hen")
+
+    def test_run_once_sends_existing_rules_and_deletes_ai_marked_rule(self) -> None:
+        class AuditingProvider:
+            def __init__(self) -> None:
+                self.existing_rule_count = 0
+
+            def analyze_events(self, events, keylog_entries=None, existing_rules=None):
+                self.existing_rule_count = len(existing_rules or [])
+                bad_rule = existing_rules[0]
+                return ProviderAnalysis(
+                    rules=[],
+                    invalid_rules=[
+                        RuleAuditFinding(
+                            rule_id=bad_rule.id,
+                            wrong_pinyin=bad_rule.wrong_pinyin,
+                            correct_pinyin=bad_rule.correct_pinyin,
+                            committed_text=bad_rule.committed_text,
+                            reason="long phrase",
+                        )
+                    ],
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                upsert_rules(
+                    conn,
+                    [
+                        LearnedRule(
+                            wrong_pinyin="zhegeshiyiduanhenchangdepinyin",
+                            correct_pinyin="zhegeshiyiduanhenchangdepinyin",
+                            committed_text="这是一段很长的候选内容",
+                            confidence=0.95,
+                            weight=180000,
+                            count=1,
+                            mistake_type="unknown",
+                            provider="fake",
+                        )
+                    ],
+                )
+            provider = AuditingProvider()
+            settings = AppSettings(
+                auto_analyze_with_ai=True,
+                provider="openai-compatible",
+                keylog_file=str(keylog_path),
+            )
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with patch("ai_ime.analysis_scheduler._build_provider", return_value=provider), patch(
+                "ai_ime.analysis_scheduler._append_learning_log"
+            ):
+                result = scheduler.run_once(force=True)
+
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                remaining = list_rules(conn)
+            self.assertTrue(result.attempted)
+            self.assertEqual(provider.existing_rule_count, 1)
+            self.assertEqual(result.sent_existing_rule_count, 1)
+            self.assertEqual(result.returned_invalid_rules, 1)
+            self.assertEqual(result.deleted_rules, 1)
+            self.assertEqual(result.invalid_rule_items[0].reason, "long phrase")
+            self.assertEqual(remaining, [])
+
+    def test_run_once_does_not_delete_ai_marked_rule_when_triple_mismatches(self) -> None:
+        class MismatchProvider:
+            def analyze_events(self, events, keylog_entries=None, existing_rules=None):
+                bad_rule = existing_rules[0]
+                return ProviderAnalysis(
+                    rules=[],
+                    invalid_rules=[
+                        RuleAuditFinding(
+                            rule_id=bad_rule.id,
+                            wrong_pinyin=bad_rule.wrong_pinyin,
+                            correct_pinyin=bad_rule.correct_pinyin,
+                            committed_text="不同的中文",
+                            reason="mismatch",
+                        )
+                    ],
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                upsert_rules(
+                    conn,
+                    [
+                        LearnedRule(
+                            wrong_pinyin="xainzai",
+                            correct_pinyin="xianzai",
+                            committed_text="现在",
+                            confidence=0.85,
+                            weight=145000,
+                            count=2,
+                            mistake_type="adjacent_transposition",
+                            provider="fake",
+                        )
+                    ],
+                )
+            settings = AppSettings(
+                auto_analyze_with_ai=True,
+                provider="openai-compatible",
+                keylog_file=str(keylog_path),
+            )
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with patch("ai_ime.analysis_scheduler._build_provider", return_value=MismatchProvider()), patch(
+                "ai_ime.analysis_scheduler._append_learning_log"
+            ):
+                result = scheduler.run_once(force=True)
+
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                remaining = list_rules(conn)
+            self.assertEqual(result.returned_invalid_rules, 1)
+            self.assertEqual(result.deleted_rules, 0)
+            self.assertEqual(len(remaining), 1)
 
     def test_run_once_keeps_keylog_offset_when_provider_fails(self) -> None:
         class FailingProvider:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import json
 import threading
 import time
+from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,10 +13,10 @@ from typing import Any
 from ai_ime.config import default_data_dir, default_db_path
 from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.correction.rules import classify_mistake, event_supports_rule
-from ai_ime.db import connect, init_db, list_events, list_rules, upsert_rules
+from ai_ime.db import connect, delete_rule, init_db, list_events, list_rules, upsert_rules
 from ai_ime.learning import _append_learning_log, _build_provider
 from ai_ime.listener import KeyLogEntry, keyboard_name_to_stroke, keylog_file_lock
-from ai_ime.models import CorrectionEvent, LearnedRule
+from ai_ime.models import CorrectionEvent, LearnedRule, ProviderAnalysis, RuleAuditFinding
 from ai_ime.providers import ProviderError
 from ai_ime.rime.deploy import deploy_rime_files
 from ai_ime.rime.weasel import run_weasel_deployer
@@ -49,6 +51,10 @@ class AnalysisRunResult:
     deleted_keylog_bytes: int = 0
     rules: tuple[LearnedRule, ...] = ()
     rejected_rule_items: tuple[LearnedRule, ...] = ()
+    sent_existing_rule_count: int = 0
+    returned_invalid_rules: int = 0
+    deleted_rules: int = 0
+    invalid_rule_items: tuple[RuleAuditFinding, ...] = ()
     deployed: bool = False
     rime_redeployed: bool = False
 
@@ -86,6 +92,7 @@ class AdaptiveAnalysisScheduler:
             init_db(conn)
             events = list_events(conn)
             new_events = [event for event in events if (event.id or 0) > state.last_analyzed_event_id]
+            existing_rules = list_rules(conn)
 
         activity_count = len(keylog_entries) + len(new_events)
         next_interval = choose_next_interval(activity_count, state.next_interval_seconds)
@@ -100,18 +107,24 @@ class AdaptiveAnalysisScheduler:
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, len(keylog_entries), len(new_events), next_interval, "AI analysis disabled")
 
-        if not new_events and not keylog_entries and (not force or not events):
+        if not new_events and not keylog_entries and (not force or (not events and not existing_rules)):
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, 0, 0, next_interval, "No new typing activity")
 
         keylog_payload = keylog_payload_for_settings(self.settings, keylog_entries)
         events_for_provider = events_for_analysis(events, new_events, keylog_payload, force=force)
-        if not events_for_provider and not keylog_payload:
+        rules_for_provider = existing_rules if (events_for_provider or keylog_payload or force) else []
+        if not events_for_provider and not keylog_payload and not rules_for_provider:
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, len(keylog_entries), 0, next_interval, "No correction events to analyze")
 
         try:
-            rules = _build_provider(self.settings).analyze_events(events_for_provider, keylog_entries=keylog_payload)
+            provider_result = _analyze_with_provider(
+                _build_provider(self.settings),
+                events_for_provider,
+                keylog_payload,
+                rules_for_provider,
+            )
         except ProviderError as exc:
             _append_learning_log(f"scheduled AI analysis failed: {exc}")
             save_scheduler_state(_failure_state(state, next_interval), self.state_path)
@@ -121,15 +134,19 @@ class AdaptiveAnalysisScheduler:
             save_scheduler_state(_failure_state(state, next_interval), self.state_path)
             return AnalysisRunResult(True, 0, len(keylog_entries), len(new_events), next_interval, str(exc))
 
+        rules = list(provider_result.rules)
         accepted_rules, rejected_rule_items = partition_rules_by_evidence(rules, events_for_provider, keylog_payload)
         rejected = len(rejected_rule_items)
+        deleted_rule_items: list[RuleAuditFinding]
         with closing(connect(self.db_path)) as conn:
             init_db(conn)
             upserted = upsert_rules(conn, accepted_rules)
+            deleted_rule_items = delete_rules_from_audit_findings(conn, provider_result.invalid_rules, existing_rules)
+            deleted_rules = len(deleted_rule_items)
         deployed = False
         rime_redeployed = False
         deploy_error = ""
-        if accepted_rules and self.settings.auto_deploy_rime and self.settings.rime_dir:
+        if (accepted_rules or deleted_rules) and self.settings.auto_deploy_rime and self.settings.rime_dir:
             try:
                 deployed, rime_redeployed = _deploy_enabled_rules(self.settings, self.db_path)
             except Exception as exc:
@@ -154,12 +171,16 @@ class AdaptiveAnalysisScheduler:
         _append_learning_log(
             "scheduled AI analysis "
             f"events={len(events_for_provider)}/{len(new_events)} keylogs={len(keylog_payload)}/{len(keylog_entries)} "
-            f"rules={upserted} rejected={rejected} deployed={deployed} redeployed={rime_redeployed} "
+            f"existing_rules={len(rules_for_provider)} rules={upserted} rejected={rejected} "
+            f"invalid_suggestions={len(provider_result.invalid_rules)} deleted_rules={deleted_rules} "
+            f"deployed={deployed} redeployed={rime_redeployed} "
             f"deleted_keylog_bytes={deleted_keylog_bytes} next={next_interval}s"
         )
         message = "AI analysis completed"
         if rejected:
             message += f"; rejected {rejected} unsupported rule(s)"
+        if deleted_rules:
+            message += f"; deleted {deleted_rules} invalid rule(s)"
         if deployed:
             message += "; Rime rules deployed"
             if not rime_redeployed:
@@ -180,6 +201,10 @@ class AdaptiveAnalysisScheduler:
             deleted_keylog_bytes=deleted_keylog_bytes,
             rules=tuple(accepted_rules),
             rejected_rule_items=tuple(rejected_rule_items),
+            sent_existing_rule_count=len(rules_for_provider),
+            returned_invalid_rules=len(provider_result.invalid_rules),
+            deleted_rules=deleted_rules,
+            invalid_rule_items=tuple(deleted_rule_items),
             deployed=deployed,
             rime_redeployed=rime_redeployed,
         )
@@ -211,6 +236,66 @@ def _deploy_enabled_rules(settings: AppSettings, db_path: Path) -> tuple[bool, b
         semantic_logger_enabled=settings.record_candidate_commits,
     )
     return True, run_weasel_deployer()
+
+
+def _analyze_with_provider(
+    provider: object,
+    events: list[CorrectionEvent],
+    keylog_entries: list[KeyLogEntry],
+    existing_rules: list[LearnedRule],
+) -> ProviderAnalysis:
+    analyze_events = provider.analyze_events
+    kwargs: dict[str, object] = {"keylog_entries": keylog_entries}
+    try:
+        signature = inspect.signature(analyze_events)
+    except (TypeError, ValueError):
+        signature = None
+    if signature is None or _accepts_keyword(signature, "existing_rules"):
+        kwargs["existing_rules"] = existing_rules
+    result = analyze_events(events, **kwargs)
+    if isinstance(result, ProviderAnalysis):
+        return result
+    return ProviderAnalysis(rules=list(result), invalid_rules=())
+
+
+def _accepts_keyword(signature: inspect.Signature, name: str) -> bool:
+    for parameter in signature.parameters.values():
+        if parameter.kind is inspect.Parameter.VAR_KEYWORD:
+            return True
+        if parameter.name == name and parameter.kind in {
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        }:
+            return True
+    return False
+
+
+def delete_rules_from_audit_findings(
+    conn: Any,
+    findings: Sequence[RuleAuditFinding],
+    existing_rules: Sequence[LearnedRule],
+) -> list[RuleAuditFinding]:
+    rules_by_id = {rule.id: rule for rule in existing_rules if rule.id is not None}
+    deleted: list[RuleAuditFinding] = []
+    for finding in findings:
+        if finding.action != "delete" or finding.rule_id is None:
+            continue
+        rule = rules_by_id.get(finding.rule_id)
+        if rule is None or rule.id is None:
+            continue
+        if not _audit_finding_matches_rule(finding, rule):
+            continue
+        if delete_rule(conn, rule.id):
+            deleted.append(finding)
+    return deleted
+
+
+def _audit_finding_matches_rule(finding: RuleAuditFinding, rule: LearnedRule) -> bool:
+    return (
+        normalize_pinyin(rule.wrong_pinyin) == normalize_pinyin(finding.wrong_pinyin)
+        and normalize_pinyin(rule.correct_pinyin) == normalize_pinyin(finding.correct_pinyin)
+        and rule.committed_text.strip() == finding.committed_text.strip()
+    )
 
 
 def keylog_payload_for_settings(settings: AppSettings, entries: list[KeyLogEntry]) -> list[KeyLogEntry]:

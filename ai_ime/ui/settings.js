@@ -593,8 +593,10 @@ function renderAnalysisNowResult(response) {
   summary.appendChild(analysisSummaryItem("提交事件", `${response.sentEventCount ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("新增事件", `${response.newEventCount ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("键盘日志", `${response.sentKeylogCount ?? 0}/${response.keylogCount ?? 0}`));
+  summary.appendChild(analysisSummaryItem("审查规则", `${response.sentExistingRuleCount ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("模型返回", `${response.returnedRules ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("写入规则", `${response.upsertedRules ?? 0} 条`));
+  summary.appendChild(analysisSummaryItem("删除规则", `${response.deletedRules ?? 0}/${response.returnedInvalidRules ?? 0}`));
   summary.appendChild(analysisSummaryItem("Rime 部署", response.deployed ? (response.rimeRedeployed ? "已部署" : "已写入") : "未触发"));
   summary.appendChild(analysisSummaryItem("本地拒绝", `${response.rejectedRules ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("清理日志", formatBytes(response.deletedKeylogBytes ?? 0)));
@@ -602,14 +604,16 @@ function renderAnalysisNowResult(response) {
 
   const accepted = Array.isArray(response.rules) ? response.rules : [];
   const rejected = Array.isArray(response.rejectedRuleItems) ? response.rejectedRuleItems : [];
-  if (accepted.length === 0 && rejected.length === 0) {
+  const invalid = Array.isArray(response.invalidRuleItems) ? response.invalidRuleItems : [];
+  if (accepted.length === 0 && rejected.length === 0 && invalid.length === 0) {
     const empty = document.createElement("div");
     empty.className = "analysis-empty";
-    empty.textContent = "模型没有返回通过本地证据校验的新规则。";
+    empty.textContent = "模型没有返回通过本地证据校验的新规则，也没有删除旧规则。";
     container.appendChild(empty);
     return;
   }
   container.appendChild(renderAnalysisRuleGroup("已写入或更新", accepted, "accepted"));
+  container.appendChild(renderAnalysisRuleGroup("已删除的不合理规则", invalid, "invalid"));
   container.appendChild(renderAnalysisRuleGroup("已被本地拒绝", rejected, "rejected"));
 }
 
@@ -663,6 +667,11 @@ function renderAnalysisRuleRow(record, type) {
   row.appendChild(renderRecordTriple(record));
   const meta = document.createElement("span");
   meta.className = "analysis-rule-meta";
+  if (type === "invalid") {
+    meta.textContent = `已删除 · ${record.explanation || "模型判定不适合作为纠错候选"}`;
+    row.appendChild(meta);
+    return row;
+  }
   const confidence = Number(record.confidence || 0);
   meta.textContent = `${record.provider || "-"} · ${record.mistakeType || "unknown"} · ${(confidence * 100).toFixed(0)}%`;
   row.appendChild(meta);

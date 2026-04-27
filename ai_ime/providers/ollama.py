@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from ai_ime.listener import KeyLogEntry
-from ai_ime.models import CorrectionEvent, LearnedRule
+from ai_ime.models import CorrectionEvent, LearnedRule, ProviderAnalysis
 from ai_ime.providers.base import AIProvider, ProviderError
 from ai_ime.providers.http import get_json, post_json
 from ai_ime.providers.prompt import SYSTEM_PROMPT, build_user_prompt
-from ai_ime.providers.schema import parse_rules_json
+from ai_ime.providers.schema import parse_analysis_json
 
 
 class OllamaProvider(AIProvider):
@@ -18,14 +18,18 @@ class OllamaProvider(AIProvider):
         self,
         events: list[CorrectionEvent],
         keylog_entries: list[KeyLogEntry] | None = None,
-    ) -> list[LearnedRule]:
+        existing_rules: list[LearnedRule] | None = None,
+    ) -> ProviderAnalysis:
         if not self.model:
             raise ProviderError("Ollama provider requires a model.")
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(events, keylog_entries=keylog_entries)},
+                {
+                    "role": "user",
+                    "content": build_user_prompt(events, keylog_entries=keylog_entries, existing_rules=existing_rules),
+                },
             ],
             "stream": False,
             "format": "json",
@@ -37,7 +41,7 @@ class OllamaProvider(AIProvider):
         content = message.get("content")
         if not isinstance(content, str):
             raise ProviderError("Ollama message content must be a string.")
-        return parse_rules_json(content, provider="ollama")
+        return parse_analysis_json(content, provider="ollama")
 
     def list_models(self) -> list[str]:
         response = get_json(f"{self.base_url}/api/tags", timeout=self.timeout)

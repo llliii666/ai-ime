@@ -311,14 +311,18 @@ class SettingsApi:
             "keylogCount": result.keylog_count,
             "sentKeylogCount": result.sent_keylog_count,
             "deletedKeylogBytes": result.deleted_keylog_bytes,
+            "sentExistingRuleCount": result.sent_existing_rule_count,
             "newEventCount": result.new_event_count,
             "sentEventCount": result.sent_event_count,
             "returnedRules": result.returned_rules,
             "rejectedRules": result.rejected_rules,
+            "returnedInvalidRules": result.returned_invalid_rules,
+            "deletedRules": result.deleted_rules,
             "deployed": result.deployed,
             "rimeRedeployed": result.rime_redeployed,
             "rules": [_rule_payload(rule) for rule in result.rules],
             "rejectedRuleItems": [_rule_payload(rule) for rule in result.rejected_rule_items],
+            "invalidRuleItems": [_audit_finding_payload(finding) for finding in result.invalid_rule_items],
         }
 
     def open_path(self, value: str) -> dict[str, Any]:
@@ -535,6 +539,19 @@ def _rule_payload(rule: LearnedRule) -> dict[str, Any]:
     }
 
 
+def _audit_finding_payload(finding: Any) -> dict[str, Any]:
+    return {
+        "id": finding.rule_id,
+        "wrongPinyin": finding.wrong_pinyin,
+        "correctPinyin": finding.correct_pinyin,
+        "committedText": finding.committed_text,
+        "wrongCommittedText": "",
+        "provider": "AI audit",
+        "mistakeType": finding.action,
+        "explanation": finding.reason,
+    }
+
+
 def _disable_unsupported_local_rules(conn: Any) -> int:
     supported = {
         (
@@ -568,10 +585,26 @@ def _analysis_result_message(message: str) -> str:
         "No correction events to analyze": "没有可分析的纠错事件。",
         "AI analysis completed": "AI 分析已完成。",
     }
-    if message.startswith("AI analysis completed; rejected "):
-        rejected = message.removeprefix("AI analysis completed; rejected ").split(" ", 1)[0]
-        return f"AI 分析已完成，{rejected} 条规则未通过证据校验。"
+    if message.startswith("AI analysis completed"):
+        details: list[str] = []
+        rejected = _count_after_marker(message, "rejected ")
+        deleted = _count_after_marker(message, "deleted ")
+        if rejected:
+            details.append(f"{rejected} 条规则未通过证据校验")
+        if deleted:
+            details.append(f"删除 {deleted} 条不合理规则")
+        if "Rime rules deployed" in message:
+            details.append("Rime 规则已写入")
+        if details:
+            return f"AI 分析已完成，{'，'.join(details)}。"
+        return "AI 分析已完成。"
     return messages.get(message, message)
+
+
+def _count_after_marker(message: str, marker: str) -> str:
+    if marker not in message:
+        return ""
+    return message.split(marker, 1)[1].split(" ", 1)[0].strip()
 
 
 def _storage_paths(settings: AppSettings, env_path: Path, db_path: Path) -> list[dict[str, str]]:

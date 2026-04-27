@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 
@@ -30,3 +31,28 @@ class LearnedRule:
     enabled: bool = True
     id: int | None = None
     last_seen_at: str | None = None
+
+
+@dataclass(frozen=True)
+class RuleAuditFinding:
+    wrong_pinyin: str
+    correct_pinyin: str
+    committed_text: str
+    rule_id: int | None = None
+    reason: str = ""
+    action: str = "delete"
+
+
+@dataclass(frozen=True)
+class ProviderAnalysis:
+    rules: Sequence[LearnedRule]
+    invalid_rules: Sequence[RuleAuditFinding] = ()
+
+    def __iter__(self) -> Iterator[LearnedRule]:
+        return iter(self.rules)
+
+    def __len__(self) -> int:
+        return len(self.rules)
+
+    def __getitem__(self, index: int) -> LearnedRule:
+        return self.rules[index]

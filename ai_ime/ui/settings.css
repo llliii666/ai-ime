@@ -708,6 +708,11 @@ select:focus {
   background: #fffafa;
 }
 
+.analysis-rule-row.invalid {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
 .analysis-rule-meta,
 .analysis-empty {
   color: var(--muted);
