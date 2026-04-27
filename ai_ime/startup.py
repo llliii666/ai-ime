@@ -4,7 +4,6 @@ import os
 import sys
 from pathlib import Path
 
-
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APP_RUN_NAME = "AIIME"
 

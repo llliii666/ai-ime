@@ -1,6 +1,6 @@
-import unittest
 import os
 import tempfile
+import unittest
 from pathlib import Path
 
 from ai_ime.settings_window import _settings_html_path, render_settings_html

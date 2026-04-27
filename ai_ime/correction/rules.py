@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.models import CorrectionEvent, LearnedRule
@@ -112,7 +111,7 @@ def levenshtein_distance(left: str, right: str) -> int:
 def _is_adjacent_transposition(wrong: str, correct: str) -> bool:
     if len(wrong) != len(correct):
         return False
-    differences = [index for index, pair in enumerate(zip(wrong, correct)) if pair[0] != pair[1]]
+    differences = [index for index, pair in enumerate(zip(wrong, correct, strict=True)) if pair[0] != pair[1]]
     if len(differences) != 2:
         return False
     first, second = differences

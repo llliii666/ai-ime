@@ -1,7 +1,6 @@
-import unittest
 import tempfile
+import unittest
 from pathlib import Path
-
 from unittest.mock import patch
 
 from ai_ime.doctor import CheckResult, format_checks, has_error, run_checks

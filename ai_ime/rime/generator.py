@@ -4,7 +4,6 @@ from pathlib import Path
 
 from ai_ime.models import LearnedRule
 
-AI_IME_LUA_MODULE = "ai_ime_logger"
 AI_IME_LUA_PROCESSOR = "*ai_ime_logger"
 AI_IME_LUA_BOOTSTRAP_START = "-- AI IME logger bootstrap: start"
 AI_IME_LUA_BOOTSTRAP_END = "-- AI IME logger bootstrap: end"
@@ -66,27 +65,6 @@ def render_typo_translator_patch(dictionary_id: str = "ai_typo") -> str:
         "    enable_user_dict: false\n"
         "    initial_quality: 50\n"
     )
-
-
-def render_lua_bootstrap(
-    module_name: str = AI_IME_LUA_MODULE,
-    processor_name: str = "ai_ime_logger_processor",
-) -> str:
-    return (
-        f"{AI_IME_LUA_BOOTSTRAP_START}\n"
-        f"local ai_ime_logger = require(\"{module_name}\")\n"
-        f"{processor_name} = ai_ime_logger.processor\n"
-        f"{AI_IME_LUA_BOOTSTRAP_END}\n"
-    )
-
-
-def merge_lua_bootstrap(content: str) -> str:
-    lines = _remove_generated_lua_bootstrap_lines(content.splitlines())
-    prefix = "\n".join(lines).rstrip()
-    bootstrap = render_lua_bootstrap().rstrip()
-    if prefix:
-        return f"{prefix}\n\n{bootstrap}\n"
-    return f"{bootstrap}\n"
 
 
 def remove_lua_bootstrap(content: str) -> str:

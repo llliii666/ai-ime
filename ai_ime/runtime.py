@@ -7,7 +7,6 @@ from pathlib import Path
 
 from ai_ime.config import default_data_dir
 
-
 PID_FILE_NAME = "ai-ime.pid"
 
 

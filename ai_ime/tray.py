@@ -6,8 +6,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
 import pystray
+from PIL import Image, ImageDraw, ImageFont
 
 from ai_ime.analysis_scheduler import AdaptiveAnalysisScheduler
 from ai_ime.config import default_data_dir, load_env_file

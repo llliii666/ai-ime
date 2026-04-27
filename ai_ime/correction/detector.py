@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.models import CorrectionEvent
 
-
 CANDIDATE_SELECTION_KEYS = {str(index) for index in range(10)}
 CONFIRM_KEYS = {"space", "enter", *CANDIDATE_SELECTION_KEYS}
 DELETE_KEYS = {"backspace", "delete"}

@@ -9,7 +9,6 @@ from typing import Any
 from ai_ime.config import default_data_dir, env_value
 from ai_ime.providers.presets import infer_provider_preset
 
-
 SETTINGS_FILE_NAME = "settings.json"
 
 

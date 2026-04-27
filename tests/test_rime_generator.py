@@ -5,7 +5,6 @@ from pathlib import Path
 from ai_ime.models import LearnedRule
 from ai_ime.rime.generator import (
     export_rime_files,
-    merge_lua_bootstrap,
     remove_lua_bootstrap,
     render_dictionary,
     render_lua_logger,
@@ -81,16 +80,6 @@ class RimeGeneratorTests(unittest.TestCase):
         self.assertIn('"source":', content)
         self.assertIn('"candidate_text":', content)
         self.assertIn("commit_notifier:connect", content)
-
-    def test_merge_lua_bootstrap_replaces_generated_block(self) -> None:
-        content = "-- custom\n-- AI IME logger bootstrap: start\nold = true\n-- AI IME logger bootstrap: end\n"
-
-        merged = merge_lua_bootstrap(content)
-
-        self.assertIn("-- custom", merged)
-        self.assertIn('local ai_ime_logger = require("ai_ime_logger")', merged)
-        self.assertEqual(merged.count("AI IME logger bootstrap: start"), 1)
-        self.assertNotIn("old = true", merged)
 
     def test_remove_lua_bootstrap_removes_generated_block(self) -> None:
         content = "-- custom\n-- AI IME logger bootstrap: start\nold = true\n-- AI IME logger bootstrap: end\n"

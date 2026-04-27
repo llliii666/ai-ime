@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 _PINYIN_RE = re.compile(r"[a-z]+")
 
 

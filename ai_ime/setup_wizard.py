@@ -11,7 +11,6 @@ from ai_ime.doctor import CheckResult, run_checks
 from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
 from ai_ime.settings import AppSettings, default_settings_path, load_app_settings, save_app_settings
 
-
 ENV_TEMPLATE = """AI_IME_PROVIDER=openai-compatible
 AI_IME_PROVIDER_PRESET=openai
 AI_IME_OPENAI_BASE_URL=https://api.openai.com/v1
