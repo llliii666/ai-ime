@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ai_ime.config import default_data_dir
 from ai_ime.runtime import clear_pid_file, is_pid_running, pid_file_path, read_pid_file
+from ai_ime.startup import default_project_root, default_pythonw_executable
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,6 +20,15 @@ def main(argv: list[str] | None = None) -> int:
         return stop_background()
     if args.status:
         return print_status()
+    if args.settings_window:
+        from ai_ime.settings_window import main as settings_window_main
+
+        settings_args: list[str] = []
+        if args.settings_persistent:
+            settings_args.append("--persistent")
+        if args.settings_show_signal:
+            settings_args.extend(["--show-signal", args.settings_show_signal])
+        return int(settings_window_main(settings_args))
     if args.foreground:
         from ai_ime.tray import main as tray_main
 
@@ -32,6 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force", action="store_true", help="Start even if a previous pid file exists.")
     parser.add_argument("--status", action="store_true", help="Print background process status.")
     parser.add_argument("--stop", action="store_true", help="Stop the background tray process.")
+    parser.add_argument("--settings-window", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--settings-persistent", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--settings-show-signal", default="", help=argparse.SUPPRESS)
     return parser
 
 
@@ -46,7 +59,7 @@ def start_background(force: bool = False) -> int:
     with log_file.open("a", encoding="utf-8", newline="\n") as log:
         process = subprocess.Popen(
             build_tray_command(),
-            cwd=Path.cwd(),
+            cwd=runtime_working_directory(),
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=log,
@@ -54,6 +67,10 @@ def start_background(force: bool = False) -> int:
             close_fds=True,
         )
     runtime_pid = _wait_for_runtime_pid(process.pid)
+    if not runtime_pid:
+        print("AI IME did not start. Another instance may already be running, or startup failed.")
+        print(f"Log file: {log_file}")
+        return 1
     if runtime_pid and runtime_pid != process.pid:
         print(f"AI IME started in background with launcher pid {process.pid}; tray pid {runtime_pid}.")
     else:
@@ -88,16 +105,19 @@ def stop_background() -> int:
 
 
 def build_tray_command() -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [str(Path(sys.executable)), "--foreground"]
     return [_pythonw_executable(), "-m", "ai_ime.tray"]
 
 
 def _pythonw_executable() -> str:
-    executable = Path(sys.executable)
-    if os.name == "nt":
-        pythonw = executable.with_name("pythonw.exe")
-        if pythonw.exists():
-            return str(pythonw)
-    return str(executable)
+    return str(default_pythonw_executable(runtime_working_directory()))
+
+
+def runtime_working_directory() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return default_project_root().resolve()
 
 
 def _detached_creationflags() -> int:
@@ -113,7 +133,7 @@ def _wait_for_runtime_pid(launcher_pid: int, timeout: float = 5.0) -> int:
         if runtime_pid and is_pid_running(runtime_pid):
             return runtime_pid
         if not is_pid_running(launcher_pid):
-            break
+            return 0
         time.sleep(0.1)
     return launcher_pid
 

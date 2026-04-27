@@ -16,9 +16,10 @@ from ai_ime.icons import app_icon_path
 from ai_ime.learning import AutoLearningEngine
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
 from ai_ime.rime.paths import detect_preferred_schema, find_existing_user_dir
-from ai_ime.runtime import clear_pid_file, write_pid_file
+from ai_ime.runtime import acquire_single_instance, clear_pid_file, write_pid_file
 from ai_ime.settings import AppSettings, load_app_settings, resolved_keylog_path, save_app_settings
 from ai_ime.signals import default_settings_show_signal_path, default_settings_updated_signal_path, touch_signal
+from ai_ime.startup import default_project_root, default_pythonw_executable, sync_start_on_login
 
 
 class KeyboardLogger:
@@ -77,9 +78,12 @@ class KeyboardLogger:
 
 def main(argv: list[str] | None = None) -> int:
     load_env_file(Path(".env"))
+    if not acquire_single_instance():
+        return 0
     write_pid_file()
 
     settings = prepare_settings(load_app_settings())
+    sync_start_on_login(settings.start_on_login)
     logger = KeyboardLogger()
     _apply_listener_settings(logger, settings)
     settings_window = SettingsWindowController()
@@ -214,7 +218,7 @@ def open_settings_window_process(command: list[str] | None = None, signal_path: 
     try:
         process = subprocess.Popen(
             command or build_settings_window_command(signal_path=signal_path, persistent=True),
-            cwd=Path.cwd(),
+            cwd=runtime_working_directory(),
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=log,
@@ -229,10 +233,17 @@ def open_settings_window_process(command: list[str] | None = None, signal_path: 
 
 
 def build_settings_window_command(signal_path: Path | None = None, persistent: bool = False) -> list[str]:
-    command = [_pythonw_executable(), "-m", "ai_ime.settings_window"]
+    if getattr(sys, "frozen", False):
+        command = [str(Path(sys.executable)), "--settings-window"]
+    else:
+        command = [_pythonw_executable(), "-m", "ai_ime.settings_window"]
     if persistent:
-        command.append("--persistent")
-        command.extend(["--show-signal", str(signal_path or default_settings_show_signal_path())])
+        if getattr(sys, "frozen", False):
+            command.append("--settings-persistent")
+            command.extend(["--settings-show-signal", str(signal_path or default_settings_show_signal_path())])
+        else:
+            command.append("--persistent")
+            command.extend(["--show-signal", str(signal_path or default_settings_show_signal_path())])
     return command
 
 
@@ -247,12 +258,13 @@ def _apply_listener_settings(logger: KeyboardLogger, settings: AppSettings) -> N
 
 
 def _pythonw_executable() -> str:
-    executable = Path(sys.executable)
-    if sys.platform.startswith("win"):
-        pythonw = executable.with_name("pythonw.exe")
-        if pythonw.exists():
-            return str(pythonw)
-    return str(executable)
+    return str(default_pythonw_executable(runtime_working_directory()))
+
+
+def runtime_working_directory() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return default_project_root().resolve()
 
 
 def _detached_creationflags() -> int:

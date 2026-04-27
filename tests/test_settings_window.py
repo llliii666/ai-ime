@@ -26,6 +26,16 @@ class SettingsWindowTests(unittest.TestCase):
         self.assertIn("--persistent", command)
         self.assertEqual(command[-2:], ["--show-signal", str(signal_path)])
 
+    def test_frozen_tray_opens_settings_window_through_app_entry(self) -> None:
+        signal_path = Path("show.signal")
+        with patch("ai_ime.tray.sys.frozen", True, create=True), patch("ai_ime.tray.sys.executable", "AI IME.exe"):
+            command = build_settings_window_command(signal_path=signal_path, persistent=True)
+
+        self.assertEqual(
+            command,
+            ["AI IME.exe", "--settings-window", "--settings-persistent", "--settings-show-signal", str(signal_path)],
+        )
+
     def test_settings_window_controller_reuses_running_process(self) -> None:
         class FakeProcess:
             def poll(self):
@@ -51,7 +61,8 @@ class SettingsWindowTests(unittest.TestCase):
                 os.environ["AI_IME_OPENAI_API_KEY"] = "secret-value"
                 api = SettingsApi(env_path=Path(tmp) / ".env", db_path=Path(tmp) / "ai-ime.db")
 
-                html = render_settings_html(api)
+                with patch("ai_ime.ui_api.sync_start_on_login", return_value=False):
+                    html = render_settings_html(api)
 
             self.assertIn("<style>", html)
             self.assertIn('id="initial-state"', html)

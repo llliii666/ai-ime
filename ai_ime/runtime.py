@@ -8,6 +8,7 @@ from pathlib import Path
 from ai_ime.config import default_data_dir
 
 PID_FILE_NAME = "ai-ime.pid"
+_SINGLE_INSTANCE_HANDLE: int | None = None
 
 
 def pid_file_path() -> Path:
@@ -39,6 +40,34 @@ def clear_pid_file(path: Path | None = None, expected_pid: int | None = None) ->
     if expected_pid is not None and read_pid_file(resolved) != expected_pid:
         return
     resolved.unlink()
+
+
+def acquire_single_instance(name: str = "AI IME Tray") -> bool:
+    global _SINGLE_INSTANCE_HANDLE
+    if os.name != "nt":
+        return True
+    if _SINGLE_INSTANCE_HANDLE:
+        return True
+
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.CreateMutexW(None, False, name)
+    if not handle:
+        return True
+    already_exists = kernel32.GetLastError() == 183
+    if already_exists:
+        kernel32.CloseHandle(handle)
+        return False
+    _SINGLE_INSTANCE_HANDLE = handle
+    atexit.register(_release_single_instance)
+    return True
+
+
+def _release_single_instance() -> None:
+    global _SINGLE_INSTANCE_HANDLE
+    if not _SINGLE_INSTANCE_HANDLE or os.name != "nt":
+        return
+    ctypes.windll.kernel32.CloseHandle(_SINGLE_INSTANCE_HANDLE)
+    _SINGLE_INSTANCE_HANDLE = None
 
 
 def is_pid_running(pid: int | None) -> bool:

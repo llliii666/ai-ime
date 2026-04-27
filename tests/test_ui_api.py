@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from ai_ime.db import connect, init_db, insert_event, list_events, list_rules, upsert_rules
 from ai_ime.models import CorrectionEvent, LearnedRule
+from ai_ime.settings import AppSettings, save_app_settings
 from ai_ime.ui_api import SettingsApi, _settings_from_payload, _settings_payload
 
 
@@ -53,7 +54,7 @@ class SettingsApiTests(unittest.TestCase):
                 env_path.write_text("AI_IME_OPENAI_API_KEY=secret-value\n", encoding="utf-8")
                 api = SettingsApi(env_path=env_path, db_path=Path(tmp) / "ai-ime.db")
 
-                with patch("ai_ime.ui_api.set_start_on_login") as mocked_startup:
+                with patch("ai_ime.ui_api.sync_start_on_login", return_value=False) as mocked_startup:
                     response = api.save_settings(
                         {
                             "settings": {
@@ -249,6 +250,25 @@ class SettingsApiTests(unittest.TestCase):
                 preset_ids = {preset["id"] for preset in state["meta"]["providerPresets"]}
                 self.assertIn("openai", preset_ids)
                 self.assertIn("ollama", preset_ids)
+        finally:
+            if old_local_app_data is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = old_local_app_data
+
+    def test_load_state_repairs_enabled_startup_registration(self) -> None:
+        old_local_app_data = os.environ.get("LOCALAPPDATA")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                os.environ["LOCALAPPDATA"] = str(Path(tmp) / "LocalAppData")
+                save_app_settings(AppSettings(start_on_login=True))
+                api = SettingsApi(env_path=Path(tmp) / ".env", db_path=Path(tmp) / "ai-ime.db")
+
+                with patch("ai_ime.ui_api.sync_start_on_login", return_value=True) as mocked_startup:
+                    state = api.load_state()
+
+                self.assertTrue(state["settings"]["start_on_login"])
+                mocked_startup.assert_called_once_with(True)
         finally:
             if old_local_app_data is None:
                 os.environ.pop("LOCALAPPDATA", None)
