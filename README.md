@@ -6,6 +6,14 @@ AI IME 是一个面向 Windows + 小狼毫/Rime + 雾凇拼音的拼音纠错学
 
 当前状态：Alpha。适合愿意尝鲜的 Windows 用户；正式安装包仍在建设中。
 
+## 效果预览
+
+示例截图中的本地文件路径已做脱敏处理。
+
+![AI IME 常规设置界面](docs/images/settings-general.png)
+
+![AI IME 纠错记录界面](docs/images/settings-records.png)
+
 ## 适合谁
 
 - 你主要用拼音输入中文。
