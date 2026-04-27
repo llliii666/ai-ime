@@ -680,7 +680,7 @@ function renderRecords(records) {
     row.className = "record-row";
     row.style.setProperty("--i", String(Math.min(index, 12)));
     row.appendChild(renderRecordTriple(record));
-    row.appendChild(renderRecordMeta(record));
+    row.appendChild(renderRecordMeta(record, index));
     row.appendChild(renderRecordActions(record));
     list.appendChild(row);
   });
@@ -706,15 +706,16 @@ function renderRecordTriple(record) {
   return wrapper;
 }
 
-function renderRecordMeta(record) {
+function renderRecordMeta(record, index = 0) {
   const meta = document.createElement("div");
   meta.className = "record-meta";
+  const displayNumber = typeof index === "number" ? index + 1 : 1;
   if (activeRecordKind === "rules") {
     const confidence = Number(record.confidence || 0);
-    meta.appendChild(recordMetaLine(`规则 #${record.id ?? "-"}`, `${record.provider || "rule"} · ${record.count || 0} 次 · ${(confidence * 100).toFixed(0)}%`));
+    meta.appendChild(recordMetaLine(`规则 #${displayNumber}`, `ID ${record.id ?? "-"} · ${record.provider || "rule"} · ${record.count || 0} 次 · ${(confidence * 100).toFixed(0)}%`));
     meta.appendChild(recordSmall(record.lastSeenAt || ""));
   } else {
-    meta.appendChild(recordMetaLine(`事件 #${record.id ?? "-"}`, `${record.source || "unknown"} · ${record.commitKey || "unknown"}`));
+    meta.appendChild(recordMetaLine(`事件 #${displayNumber}`, `ID ${record.id ?? "-"} · ${record.source || "unknown"} · ${record.commitKey || "unknown"}`));
     meta.appendChild(recordSmall(record.createdAt || ""));
   }
   return meta;
