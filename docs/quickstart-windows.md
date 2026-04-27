@@ -20,6 +20,7 @@ cd ai-ime
 uv sync
 Copy-Item .env.example .env
 uv run python -m ai_ime setup
+uv run python -m ai_ime create-shortcut
 ```
 
 如果只想检查会发生什么：
@@ -37,6 +38,8 @@ uv run python -m ai_ime doctor
 `env` 如果显示 WARN，通常是 `.env` 里还没有填写真实模型 key。只验证本地纠错时可以先不配置模型。
 
 ## 3. 启动托盘程序
+
+初始化后桌面会出现 `AI IME` 快捷方式，之后可以直接双击启动托盘程序。也可以继续使用命令行启动：
 
 ```powershell
 uv run python run.py

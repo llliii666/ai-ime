@@ -31,8 +31,9 @@ if (-not (Test-Path -LiteralPath ".env") -and (Test-Path -LiteralPath ".env.exam
 }
 
 uv run python -m ai_ime setup
+uv run python -m ai_ime create-shortcut
 
 Write-Host ""
 Write-Host "Bootstrap complete."
-Write-Host "Start the tray app with:"
+Write-Host "Desktop shortcut created. Start the tray app by double-clicking AI IME, or run:"
 Write-Host "  uv run python run.py"

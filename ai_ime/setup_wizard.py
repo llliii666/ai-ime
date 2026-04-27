@@ -85,6 +85,7 @@ def format_setup_result(result: SetupResult) -> str:
             f"Settings: {result.settings_path}",
             f"Database: {result.db_path}",
             f"Env file: {result.env_path.resolve()}",
+            "Shortcut: run `uv run python -m ai_ime create-shortcut` to create a desktop icon.",
             "Next: run `uv run python run.py` to start the tray app.",
         ]
     )

@@ -27,6 +27,7 @@ from .rime.deploy import deploy_rime_files, rollback_backup
 from .rime.generator import export_rime_files
 from .rime.paths import find_existing_user_dir
 from .setup_wizard import format_setup_result, run_initial_setup
+from .shortcut import create_desktop_shortcut
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -62,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor_parser = subparsers.add_parser("doctor", help="Check local AI IME environment.")
     doctor_parser.set_defaults(handler=handle_doctor)
+
+    shortcut_parser = subparsers.add_parser("create-shortcut", help="Create a Windows desktop shortcut.")
+    shortcut_parser.add_argument("--name", default="AI IME", help="Shortcut display name.")
+    shortcut_parser.add_argument("--path", type=Path, help="Optional explicit .lnk path.")
+    shortcut_parser.set_defaults(handler=handle_create_shortcut)
 
     add_parser = subparsers.add_parser("add-event", help="Add one correction event.")
     add_parser.add_argument("--wrong", required=True, help="Mistyped pinyin, e.g. xainzai.")
@@ -211,6 +217,18 @@ def handle_doctor(args: argparse.Namespace) -> int:
     results = run_checks(db_path=args.db)
     print(format_checks(results))
     return 1 if has_error(results) else 0
+
+
+def handle_create_shortcut(args: argparse.Namespace) -> int:
+    try:
+        spec = create_desktop_shortcut(name=args.name, shortcut_path=args.path)
+    except Exception as exc:
+        print(f"Failed to create desktop shortcut: {exc}")
+        return 1
+    print(f"Created shortcut: {spec.path}")
+    print(f"Target: {spec.target} {spec.arguments}")
+    print(f"Working directory: {spec.working_directory}")
+    return 0
 
 
 def handle_add_event(args: argparse.Namespace) -> int:

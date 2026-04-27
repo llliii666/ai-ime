@@ -30,6 +30,7 @@ cd ai-ime
 uv sync
 Copy-Item .env.example .env
 uv run python -m ai_ime setup
+uv run python -m ai_ime create-shortcut
 uv run python run.py
 ```
 
@@ -49,6 +50,7 @@ powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
 uv run python -m ai_ime --help
 uv run python -m ai_ime setup --dry-run
 uv run python -m ai_ime doctor
+uv run python -m ai_ime create-shortcut
 uv run python run.py
 uv run python run.py --status
 uv run python run.py --stop
