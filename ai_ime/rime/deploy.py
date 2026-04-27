@@ -39,7 +39,7 @@ class DeploymentResult:
 def deploy_rime_files(
     rules: list[LearnedRule],
     rime_dir: Path,
-    schema_id: str = "luna_pinyin",
+    schema_id: str = "rime_ice",
     dictionary_id: str = "ai_typo",
     base_dictionary: str = "",
     force_schema_patch: bool = False,

@@ -45,7 +45,7 @@ class RimeDeployTests(unittest.TestCase):
     def test_existing_patch_is_merged_without_force(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             rime_dir = Path(tmp)
-            existing_patch = rime_dir / "luna_pinyin.custom.yaml"
+            existing_patch = rime_dir / "rime_ice.custom.yaml"
             existing_patch.write_text("patch:\n  menu/page_size: 9\n", encoding="utf-8")
 
             result = deploy_rime_files(sample_rules(), rime_dir)

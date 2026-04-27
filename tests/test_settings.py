@@ -7,6 +7,9 @@ from ai_ime.settings import AppSettings, load_app_settings, save_app_settings, w
 
 
 class SettingsTests(unittest.TestCase):
+    def test_default_schema_prefers_rime_ice(self) -> None:
+        self.assertEqual(AppSettings().rime_schema, "rime_ice")
+
     def test_save_and_load_app_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "settings.json"

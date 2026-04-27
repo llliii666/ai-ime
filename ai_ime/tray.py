@@ -15,7 +15,7 @@ from ai_ime.config import default_data_dir, load_env_file
 from ai_ime.icons import app_icon_path
 from ai_ime.learning import AutoLearningEngine
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
-from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
+from ai_ime.rime.paths import detect_preferred_schema, find_existing_user_dir
 from ai_ime.runtime import clear_pid_file, write_pid_file
 from ai_ime.settings import AppSettings, load_app_settings, resolved_keylog_path, save_app_settings
 from ai_ime.signals import default_settings_show_signal_path, default_settings_updated_signal_path, touch_signal
@@ -144,8 +144,8 @@ def prepare_settings(settings: AppSettings) -> AppSettings:
         if detected is not None:
             settings.rime_dir = str(detected)
     if settings.rime_dir:
-        detected_schema = detect_active_schema(Path(settings.rime_dir))
-        if detected_schema and settings.rime_schema in {"", "luna_pinyin"}:
+        detected_schema = detect_preferred_schema(Path(settings.rime_dir))
+        if detected_schema and settings.rime_schema in {"", "luna_pinyin", "rime_ice"}:
             settings.rime_schema = detected_schema
     return settings
 

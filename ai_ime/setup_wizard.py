@@ -8,7 +8,7 @@ from pathlib import Path
 from ai_ime.config import default_data_dir, default_db_path, load_env_file
 from ai_ime.db import connect, init_db
 from ai_ime.doctor import CheckResult, run_checks
-from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
+from ai_ime.rime.paths import detect_preferred_schema, find_existing_user_dir
 from ai_ime.settings import AppSettings, default_settings_path, load_app_settings, save_app_settings
 
 ENV_TEMPLATE = """AI_IME_PROVIDER=openai-compatible
@@ -146,7 +146,7 @@ def _settings_with_local_defaults(settings: AppSettings, provider: str | None = 
         if detected is not None:
             settings.rime_dir = str(detected)
     if settings.rime_dir:
-        detected_schema = detect_active_schema(Path(settings.rime_dir))
-        if detected_schema and settings.rime_schema in {"", "luna_pinyin"}:
+        detected_schema = detect_preferred_schema(Path(settings.rime_dir))
+        if detected_schema and settings.rime_schema in {"", "luna_pinyin", "rime_ice"}:
             settings.rime_schema = detected_schema
     return settings

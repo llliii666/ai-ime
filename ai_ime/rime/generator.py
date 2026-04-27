@@ -363,7 +363,7 @@ return M
 def export_rime_files(
     rules: list[LearnedRule],
     output_dir: Path,
-    schema_id: str = "luna_pinyin",
+    schema_id: str = "rime_ice",
     dictionary_id: str = "ai_typo",
     base_dictionary: str = "",
 ) -> tuple[Path, Path]:

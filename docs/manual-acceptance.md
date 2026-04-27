@@ -15,7 +15,7 @@ uv run python -m ai_ime doctor
 
 - 数据库和设置文件可初始化。
 - `.env` 可检测；如果 key 仍是占位值，`doctor` 应显示 WARN。
-- Rime 用户目录能自动检测；没有安装 Rime 时显示 WARN 而不是崩溃。
+- Rime 用户目录能自动检测；没有安装 Rime 或雾凇拼音时显示 WARN/提示而不是崩溃。
 
 ## 2. 托盘和设置窗口
 
@@ -87,10 +87,10 @@ uv run --no-editable ai-ime --db .data/acceptance.db rollback-rime --rime-dir .d
 只在确认生成文件无误后执行：
 
 ```powershell
-uv run --no-editable ai-ime --db .data/acceptance.db deploy-rime --rime-dir "$env:APPDATA\Rime"
+uv run --no-editable ai-ime --db .data/acceptance.db deploy-rime --rime-dir "$env:APPDATA\Rime" --schema rime_ice
 ```
 
-然后从小狼毫菜单执行“重新部署”，输入：
+然后确认小狼毫当前方案为“雾凇拼音”，从小狼毫菜单执行“重新部署”，输入：
 
 ```text
 xainzai

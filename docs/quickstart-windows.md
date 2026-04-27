@@ -2,7 +2,22 @@
 
 这份文档面向第一次使用 AI IME 的 Windows 用户。
 
-AI IME 不是输入法本体，也不是语音输入。它是一个后台助手：学习你的拼音误输入习惯，然后把纠错规则写入小狼毫/Rime，让候选词更符合你的输入习惯。
+AI IME 不是输入法本体，也不是语音输入。它是一个后台助手：学习你的拼音误输入习惯，然后把纠错规则写入小狼毫/Rime。推荐输入法底座是小狼毫 + 雾凇拼音。
+
+## 0. 先安装小狼毫和雾凇拼音
+
+推荐顺序：
+
+1. 安装小狼毫/Rime：<https://rime.im/download/>
+2. 安装 [雾凇拼音 rime-ice](https://github.com/iDvel/rime-ice)。
+3. 在小狼毫中选择“雾凇拼音”方案。
+4. 从小狼毫菜单执行一次“重新部署”。
+5. 再运行 AI IME 的 `START_HERE.cmd`。
+
+参考视频：
+
+- [RIME小狼毫+雾凇具体简单部署](https://www.bilibili.com/video/BV1J5UnB5Etu/)
+- [RIME小狼毫+雾凇拼音配置教程 Windows 篇](https://www.bilibili.com/video/BV1FioQY8EXD/)
 
 ## 1. 推荐路径：双击入口
 
@@ -18,24 +33,24 @@ START_HERE.cmd
 - 安装项目依赖。
 - 初始化 `%LOCALAPPDATA%\AIIME` 下的数据文件。
 - 初始化项目根目录 `.env`。
-- 检测小狼毫/Rime。
+- 检测小狼毫/Rime 和雾凇拼音配置。
 - 创建桌面快捷方式。
 - 启动右下角托盘程序。
 
 如果没有安装 `uv`，脚本会提示安装地址。安装 uv 后重新双击 `START_HERE.cmd` 即可。
 
-## 2. 小狼毫/Rime 是必须的吗
+## 2. 小狼毫/Rime + 雾凇拼音是必须的吗
 
 如果你只想打开设置界面或查看项目，可以先不安装。
 
-如果你希望输入 `xainzai` 时小狼毫候选词里出现“现在”，就必须安装小狼毫/Rime。AI IME 目前通过 Rime 词典和 schema patch 改变候选词，不能直接改造微软拼音、搜狗输入法等闭源输入法。
+如果你希望输入 `xainzai` 时小狼毫候选词里出现“现在”，就必须安装小狼毫/Rime。裸小狼毫默认体验偏繁体，建议同时安装雾凇拼音并选择“雾凇拼音”方案。AI IME 目前通过 Rime 词典和 schema patch 改变候选词，不能直接改造微软拼音、搜狗输入法等闭源输入法。
 
 小狼毫安装方式：
 
 - 官方下载页：<https://rime.im/download/>
 - winget：`winget install -e --id Rime.Weasel`
 
-安装小狼毫后，打开 AI IME 设置窗口，在“输入法”页点击“自动检测 Rime”。
+安装小狼毫和雾凇拼音后，打开 AI IME 设置窗口，在“输入法”页点击“自动检测 Rime”。方案 ID 推荐为 `rime_ice`。
 
 ## 3. 命令行路径
 
@@ -75,7 +90,7 @@ uv run python run.py --stop
 
 1. “模型”页：选择 OpenAI 兼容接口、Ollama、本地模拟等提供商，填写 Base URL 和 API Key，点击测试连接。
 2. “隐私”页：确认是否记录完整 keylog、是否允许上传完整 keylog。
-3. “输入法”页：检测 Rime 用户目录，点击“部署纠错词典”。
+3. “输入法”页：检测 Rime 用户目录，确认方案 ID 为 `rime_ice`，点击“部署纠错词典”。
 4. 从小狼毫菜单执行一次“重新部署”。
 
 `.env` 文件只是本地私有配置文件。你不需要手动编辑它；设置界面保存模型配置后会自动写入。

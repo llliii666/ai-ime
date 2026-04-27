@@ -31,7 +31,7 @@ class AppSettings:
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = ""
     rime_dir: str = ""
-    rime_schema: str = "luna_pinyin"
+    rime_schema: str = "rime_ice"
     rime_dictionary: str = "ai_typo"
     rime_base_dictionary: str = ""
     keylog_file: str = ""

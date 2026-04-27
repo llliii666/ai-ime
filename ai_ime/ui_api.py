@@ -27,7 +27,7 @@ from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from ai_ime.providers.presets import infer_provider_preset, provider_presets_payload
 from ai_ime.rime.deploy import deploy_rime_files
-from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
+from ai_ime.rime.paths import detect_preferred_schema, find_existing_user_dir, has_rime_ice_config
 from ai_ime.settings import (
     AppSettings,
     default_settings_path,
@@ -198,12 +198,15 @@ class SettingsApi:
         rime_dir = find_existing_user_dir()
         if rime_dir is None:
             return _error("没有检测到 Rime 用户目录。")
-        schema = detect_active_schema(rime_dir) or ""
+        schema = detect_preferred_schema(rime_dir) or ""
+        message = f"已检测到 Rime 目录：{rime_dir}"
+        if not has_rime_ice_config(rime_dir):
+            message += "；未发现雾凇拼音 rime_ice 配置，建议先安装雾凇拼音后再部署。"
         return {
             "ok": True,
             "rimeDir": str(rime_dir),
             "rimeSchema": schema,
-            "message": f"已检测到 Rime 目录：{rime_dir}",
+            "message": message,
         }
 
     def choose_path(self, kind: str, current: str = "") -> dict[str, Any]:
@@ -383,8 +386,8 @@ def _settings_with_detected_rime(settings: AppSettings) -> AppSettings:
         if detected is not None:
             settings.rime_dir = str(detected)
     if settings.rime_dir:
-        detected_schema = detect_active_schema(Path(settings.rime_dir))
-        if detected_schema and settings.rime_schema in {"", "luna_pinyin"}:
+        detected_schema = detect_preferred_schema(Path(settings.rime_dir))
+        if detected_schema and settings.rime_schema in {"", "luna_pinyin", "rime_ice"}:
             settings.rime_schema = detected_schema
     return settings
 
@@ -420,7 +423,7 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
         ollama_base_url=ollama_base_url,
         ollama_model=_as_string(payload.get("ollama_model"), ""),
         rime_dir=_as_string(payload.get("rime_dir"), ""),
-        rime_schema=_as_string(payload.get("rime_schema"), "luna_pinyin"),
+        rime_schema=_as_string(payload.get("rime_schema"), "rime_ice"),
         rime_dictionary=_as_string(payload.get("rime_dictionary"), "ai_typo"),
         rime_base_dictionary=_as_string(payload.get("rime_base_dictionary"), ""),
         keylog_file=_as_string(payload.get("keylog_file"), str(default_data_dir() / "keylog.jsonl")),

@@ -1,6 +1,6 @@
 # AI IME
 
-AI IME 是一个面向 Windows + 小狼毫/Rime 的拼音纠错学习助手。
+AI IME 是一个面向 Windows + 小狼毫/Rime + 雾凇拼音的拼音纠错学习助手。
 
 它不是语音输入，也不会一次生成一大段文字。它的目标很窄：观察你经常打错的拼音，例如把 `xianzai` 误打成 `xainzai`，在你改正后学习这条习惯，下次输入错误拼音时让小狼毫优先给出正确候选词。
 
@@ -10,9 +10,25 @@ AI IME 是一个面向 Windows + 小狼毫/Rime 的拼音纠错学习助手。
 
 - 你主要用拼音输入中文。
 - 你不想要“AI 帮你写一段话”，只想要更懂你输入习惯的纠错。
-- 你愿意使用小狼毫/Rime 作为输入法底座。
+- 你愿意使用小狼毫/Rime + 雾凇拼音作为输入法底座。
 
 AI IME 目前不能直接改造微软拼音、搜狗输入法等闭源输入法。它通过写入小狼毫/Rime 的本地词典和配置来影响候选词。
+
+## 前置输入法
+
+推荐先完成：
+
+1. 安装小狼毫/Rime。
+2. 安装 [雾凇拼音 rime-ice](https://github.com/iDvel/rime-ice)。
+3. 在小狼毫中选择“雾凇拼音”方案。
+4. 再运行本项目的 `START_HERE.cmd`。
+
+小狼毫官方下载页：<https://rime.im/download/>
+
+可参考这两个视频教程：
+
+- [RIME小狼毫+雾凇具体简单部署](https://www.bilibili.com/video/BV1J5UnB5Etu/)
+- [RIME小狼毫+雾凇拼音配置教程 Windows 篇](https://www.bilibili.com/video/BV1FioQY8EXD/)
 
 ## 最简单开始
 
@@ -27,11 +43,11 @@ START_HERE.cmd
 1. 检查是否安装 `uv`。
 2. 安装 Python 依赖到本项目的 `.venv`。
 3. 初始化本地设置、数据库和私有 `.env` 文件。
-4. 检测小狼毫/Rime。
+4. 检测小狼毫/Rime 和雾凇拼音配置。
 5. 创建桌面快捷方式。
 6. 启动右下角托盘程序。
 
-如果没有安装小狼毫，脚本会用中文提示，并提供官方下载页或 winget 安装方式。AI IME 可以先启动设置界面，但没有小狼毫时不会改变输入法候选词。
+如果没有安装小狼毫或雾凇拼音，脚本会用中文提示。AI IME 可以先启动设置界面，但没有小狼毫 + 雾凇拼音时不会改变输入法候选词。
 
 ## 已经会命令行
 
@@ -54,7 +70,7 @@ uv run python -m ai_ime doctor
 
 1. 点击 Windows 右下角通知区域里的 `AI IME` 图标。
 2. 在“模型”页面配置 OpenAI 兼容接口、Ollama 或其他供应商。
-3. 在“输入法”页面确认 Rime 用户目录，点击“部署纠错词典”。
+3. 在“输入法”页面确认 Rime 用户目录和方案 ID `rime_ice`，点击“部署纠错词典”。
 4. 从小狼毫菜单执行一次“重新部署”。
 5. 在“纠错”页面手动录入一条规则，或直接开始打字让它学习。
 
@@ -102,7 +118,7 @@ Rime 文件会写入小狼毫用户目录，通常是：
 %APPDATA%\Rime
 ```
 
-AI IME 会写入 `ai_typo.dict.yaml`、`ai_typo.schema.yaml`、`<当前方案>.custom.yaml` 和 `lua/ai_ime_logger.lua`，并在 `.ai-ime-backups/` 中备份被改动的文件。
+AI IME 默认会写入雾凇拼音方案 `rime_ice.custom.yaml`，同时写入 `ai_typo.dict.yaml`、`ai_typo.schema.yaml` 和 `lua/ai_ime_logger.lua`，并在 `.ai-ime-backups/` 中备份被改动的文件。
 
 ## 隐私默认值
 

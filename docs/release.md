@@ -11,7 +11,7 @@
 - README 第一屏说清楚产品是什么、依赖什么、怎么启动。
 - 根目录必须保留 `START_HERE.cmd`，让下载 zip 的用户不用理解 Python 包结构。
 - `scripts/bootstrap.ps1` 必须能完成依赖安装、初始化、桌面快捷方式创建和启动。
-- 没有安装小狼毫时必须给出中文提示，而不是隐含失败。
+- 没有安装小狼毫或雾凇拼音时必须给出中文提示，而不是隐含失败。
 
 发布前检查：
 
@@ -25,7 +25,7 @@ GitHub Release 附件：
 
 - 源码自动归档。
 - wheel 和 sdist。
-- README 中明确说明当前仍需要用户安装 `uv`、Python 和小狼毫/Rime。
+- README 中明确说明当前仍需要用户安装 `uv`、Python、小狼毫/Rime 和雾凇拼音。
 
 ## 阶段 2：Alpha zip
 
@@ -37,7 +37,7 @@ GitHub Release 附件：
 powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1 -Version v0.1.0
 ```
 
-默认采用 PyInstaller one-folder 包。这个阶段仍建议要求用户自行安装小狼毫/Rime。
+默认采用 PyInstaller one-folder 包。这个阶段仍建议要求用户自行安装小狼毫/Rime 和雾凇拼音。
 
 仓库已提供 `.github/workflows/release.yml`：
 

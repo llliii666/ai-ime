@@ -116,6 +116,7 @@ class RimeGeneratorTests(unittest.TestCase):
             )
             self.assertTrue(dictionary_path.exists())
             self.assertTrue(patch_path.exists())
+            self.assertEqual(patch_path.name, "rime_ice.custom.yaml")
             self.assertTrue((Path(tmp) / "ai_typo.schema.yaml").exists())
             self.assertIn("现在\txainzai", dictionary_path.read_text(encoding="utf-8"))
 

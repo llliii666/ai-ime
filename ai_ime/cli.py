@@ -161,14 +161,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     export_parser = subparsers.add_parser("export-rime", help="Export Rime dictionary and schema patch files.")
     export_parser.add_argument("--out", type=Path, required=True, help="Output directory.")
-    export_parser.add_argument("--schema", default="luna_pinyin", help="Rime schema id to patch.")
+    export_parser.add_argument("--schema", default="rime_ice", help="Rime schema id to patch.")
     export_parser.add_argument("--dictionary", default="ai_typo", help="Generated dictionary id.")
     export_parser.add_argument("--base-dictionary", default="", help="Optional base Rime dictionary to import.")
     export_parser.set_defaults(handler=handle_export_rime)
 
     deploy_parser = subparsers.add_parser("deploy-rime", help="Safely deploy generated Rime files.")
     deploy_parser.add_argument("--rime-dir", type=Path, help="Rime user data directory. Auto-detected if omitted.")
-    deploy_parser.add_argument("--schema", default="luna_pinyin", help="Rime schema id to patch.")
+    deploy_parser.add_argument("--schema", default="rime_ice", help="Rime schema id to patch.")
     deploy_parser.add_argument("--dictionary", default="ai_typo", help="Generated dictionary id.")
     deploy_parser.add_argument("--base-dictionary", default="", help="Optional base Rime dictionary to import.")
     deploy_parser.add_argument("--keylog-file", type=Path, help="JSONL file used by the Rime Lua semantic logger.")

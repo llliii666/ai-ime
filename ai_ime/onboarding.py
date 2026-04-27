@@ -7,11 +7,14 @@ import sys
 import webbrowser
 from pathlib import Path
 
-from ai_ime.rime.paths import find_existing_user_dir
+from ai_ime.rime.paths import RIME_ICE_SCHEMA_ID, detect_preferred_schema, find_existing_user_dir, has_rime_ice_config
 from ai_ime.setup_wizard import run_initial_setup
 from ai_ime.shortcut import create_desktop_shortcut
 
 WEASEL_DOWNLOAD_URL = "https://rime.im/download/"
+RIME_ICE_URL = "https://github.com/iDvel/rime-ice"
+RIME_ICE_VIDEO_SIMPLE = "https://www.bilibili.com/video/BV1J5UnB5Etu/"
+RIME_ICE_VIDEO_WINDOWS = "https://www.bilibili.com/video/BV1FioQY8EXD/"
 WEASEL_WINGET_ID = "Rime.Weasel"
 
 
@@ -32,15 +35,25 @@ def main(argv: list[str] | None = None) -> int:
     if rime_dir is None:
         print("未检测到小狼毫/Rime 用户目录。AI IME 可以先启动，但暂时不能改变输入法候选词。")
         print(f"官方下载页：{WEASEL_DOWNLOAD_URL}")
+        print(f"雾凇拼音配置：{RIME_ICE_URL}")
+        print(f"参考视频 1：{RIME_ICE_VIDEO_SIMPLE}")
+        print(f"参考视频 2：{RIME_ICE_VIDEO_WINDOWS}")
         print(f"winget 安装命令：winget install -e --id {WEASEL_WINGET_ID}")
         if args.install_weasel:
             install_weasel_with_winget()
         elif args.open_weasel_download:
             webbrowser.open(WEASEL_DOWNLOAD_URL)
         else:
-            print("安装小狼毫后，在设置窗口的“输入法”页点击“自动检测 Rime”。")
+            print("推荐先安装小狼毫，再安装雾凇拼音，并在小狼毫里选择“雾凇拼音”，之后再运行 START_HERE.cmd。")
     else:
         print(f"已检测到 Rime 用户目录：{rime_dir}")
+        if has_rime_ice_config(rime_dir):
+            schema = detect_preferred_schema(rime_dir) or RIME_ICE_SCHEMA_ID
+            print(f"已检测到雾凇拼音配置，当前将优先部署到方案：{schema}")
+        else:
+            print("未检测到雾凇拼音 rime_ice 配置。裸小狼毫通常是繁体体验，建议先安装雾凇拼音。")
+            print(f"雾凇拼音配置：{RIME_ICE_URL}")
+            print(f"参考视频：{RIME_ICE_VIDEO_WINDOWS}")
 
     if not args.skip_shortcut:
         print("\n== 桌面快捷方式 ==")
@@ -62,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\n已跳过启动。之后可以运行：uv run python run.py")
 
     print("\n== 下一步 ==")
-    print("打开托盘设置界面，在“模型”页配置接口，在“输入法”页部署到小狼毫。")
+    print("确认小狼毫已选择“雾凇拼音”后，打开托盘设置界面，在“模型”页配置接口，在“输入法”页部署到小狼毫。")
     return 0
 
 

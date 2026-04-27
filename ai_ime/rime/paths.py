@@ -4,6 +4,8 @@ import os
 import re
 from pathlib import Path
 
+RIME_ICE_SCHEMA_ID = "rime_ice"
+
 
 def candidate_user_dirs() -> list[Path]:
     candidates: list[Path] = []
@@ -32,6 +34,23 @@ def detect_active_schema(rime_dir: Path) -> str | None:
         if schema:
             return schema
     return None
+
+
+def detect_preferred_schema(rime_dir: Path) -> str | None:
+    active = detect_active_schema(rime_dir)
+    if active:
+        return active
+    if has_rime_ice_config(rime_dir):
+        return RIME_ICE_SCHEMA_ID
+    return None
+
+
+def has_rime_ice_config(rime_dir: Path) -> bool:
+    return has_schema(rime_dir, RIME_ICE_SCHEMA_ID) or (rime_dir / "rime_ice.dict.yaml").exists()
+
+
+def has_schema(rime_dir: Path, schema_id: str) -> bool:
+    return (rime_dir / f"{schema_id}.schema.yaml").exists()
 
 
 def _dedupe(paths: list[Path]) -> list[Path]:
