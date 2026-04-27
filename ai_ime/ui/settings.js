@@ -957,6 +957,10 @@ function handleBridgeReady() {
   bridgeReady = true;
   bindUi();
   syncActionState();
+  if (lastState) {
+    setStatus("配置已就绪", "ok");
+    return;
+  }
   loadState();
 }
 

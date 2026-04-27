@@ -37,6 +37,7 @@ from ai_ime.settings import (
     save_app_settings,
     write_provider_env,
 )
+from ai_ime.signals import default_settings_updated_signal_path, touch_signal
 from ai_ime.startup import set_start_on_login
 
 
@@ -157,6 +158,7 @@ class SettingsApi:
         write_provider_env(settings, api_key=api_key or None, path=self.env_path)
         load_env_file(self.env_path, override=True)
         set_start_on_login(settings.start_on_login)
+        touch_signal(default_settings_updated_signal_path())
         return {"ok": True, "message": "设置已保存。", "settings": _settings_payload(settings)}
 
     def add_manual_correction(self, payload: dict[str, Any]) -> dict[str, Any]:

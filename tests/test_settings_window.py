@@ -2,9 +2,10 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ai_ime.settings_window import _settings_html_path, render_settings_html
-from ai_ime.tray import build_settings_window_command
+from ai_ime.tray import SettingsWindowController, build_settings_window_command
 from ai_ime.ui_api import SettingsApi
 
 
@@ -17,6 +18,29 @@ class SettingsWindowTests(unittest.TestCase):
 
         self.assertIn("-m", command)
         self.assertIn("ai_ime.settings_window", command)
+
+    def test_tray_can_open_persistent_settings_window(self) -> None:
+        signal_path = Path("show.signal")
+        command = build_settings_window_command(signal_path=signal_path, persistent=True)
+
+        self.assertIn("--persistent", command)
+        self.assertEqual(command[-2:], ["--show-signal", str(signal_path)])
+
+    def test_settings_window_controller_reuses_running_process(self) -> None:
+        class FakeProcess:
+            def poll(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            signal_path = Path(tmp) / "show.signal"
+            controller = SettingsWindowController(signal_path=signal_path, command=["settings"])
+            controller.process = FakeProcess()  # type: ignore[assignment]
+
+            with patch("ai_ime.tray.open_settings_window_process") as opened:
+                controller.open()
+
+            opened.assert_not_called()
+            self.assertTrue(signal_path.exists())
 
     def test_render_settings_html_inlines_assets_and_initial_state(self) -> None:
         old_local_app_data = os.environ.get("LOCALAPPDATA")
@@ -42,6 +66,7 @@ class SettingsWindowTests(unittest.TestCase):
             self.assertIn("已保存接口", html)
             self.assertIn("renderAnalysisNowResult", html)
             self.assertIn("renderSavedModelSummary", html)
+            self.assertIn('setStatus("配置已就绪", "ok")', html)
             self.assertNotIn("renderModelSummary", html)
             self.assertIn("grid-template-rows: auto minmax(0, 1fr) auto", html)
             self.assertIn("overflow-y: auto", html)

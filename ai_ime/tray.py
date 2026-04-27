@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from ai_ime.listener import KeyLogEntry, KeyLogWriter
 from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
 from ai_ime.runtime import clear_pid_file, write_pid_file
 from ai_ime.settings import AppSettings, load_app_settings, resolved_keylog_path, save_app_settings
+from ai_ime.signals import default_settings_show_signal_path, default_settings_updated_signal_path, touch_signal
 
 
 class KeyboardLogger:
@@ -79,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = prepare_settings(load_app_settings())
     logger = KeyboardLogger()
     _apply_listener_settings(logger, settings)
+    settings_window = SettingsWindowController()
 
     icon = pystray.Icon("ai-ime", _build_icon(), "AI IME")
 
@@ -101,11 +104,14 @@ def main(argv: list[str] | None = None) -> int:
         _apply_listener_settings(logger, settings)
         refresh_menu()
 
+    settings_watcher = SettingsReloadWatcher(default_settings_updated_signal_path(), reload_settings)
+    settings_watcher.start()
+
     def show_settings(_icon: pystray.Icon | None = None, _item: pystray.MenuItem | None = None) -> None:
-        exit_code = open_settings_window_process()
-        if exit_code not in {0, None}:
-            _show_error(f"设置窗口异常退出，代码：{exit_code}")
-        reload_settings()
+        try:
+            settings_window.open()
+        except Exception as exc:
+            _show_error(f"设置窗口启动失败：{exc}")
 
     def toggle_listener(_icon: pystray.Icon | None = None, _item: pystray.MenuItem | None = None) -> None:
         settings.listener_enabled = not logger.running
@@ -114,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
         refresh_menu()
 
     def quit_app(_icon: pystray.Icon | None = None, _item: pystray.MenuItem | None = None) -> None:
+        settings_watcher.stop()
+        settings_window.stop()
         logger.stop()
         clear_pid_file()
         icon.stop()
@@ -123,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
         icon.run()
         return 0
     finally:
+        settings_watcher.stop()
+        settings_window.stop()
         logger.stop()
         clear_pid_file()
 
@@ -139,23 +149,90 @@ def prepare_settings(settings: AppSettings) -> AppSettings:
     return settings
 
 
-def open_settings_window_process() -> int | None:
+class SettingsWindowController:
+    def __init__(
+        self,
+        signal_path: Path | None = None,
+        command: list[str] | None = None,
+    ) -> None:
+        self.signal_path = signal_path or default_settings_show_signal_path()
+        self.command = command
+        self.process: subprocess.Popen[object] | None = None
+
+    def open(self) -> None:
+        if self.process is not None and self.process.poll() is None:
+            touch_signal(self.signal_path)
+            return
+        self.process = open_settings_window_process(command=self.command, signal_path=self.signal_path)
+
+    def stop(self) -> None:
+        if self.process is None or self.process.poll() is not None:
+            return
+        self.process.terminate()
+        try:
+            self.process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+
+
+class SettingsReloadWatcher:
+    def __init__(self, signal_path: Path, callback: Any, poll_interval: float = 0.5) -> None:
+        self.signal_path = signal_path
+        self.callback = callback
+        self.poll_interval = poll_interval
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._last_seen = _signal_mtime(signal_path)
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run, name="AIIMESettingsReloadWatcher", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1)
+        self._thread = None
+
+    def _run(self) -> None:
+        while not self._stop_event.wait(self.poll_interval):
+            current = _signal_mtime(self.signal_path)
+            if current <= self._last_seen:
+                continue
+            self._last_seen = current
+            self.callback()
+
+
+def open_settings_window_process(command: list[str] | None = None, signal_path: Path | None = None) -> subprocess.Popen[object]:
     log_file = default_data_dir() / "settings-window.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    with log_file.open("a", encoding="utf-8", newline="\n") as log:
-        completed = subprocess.run(
-            build_settings_window_command(),
+    log = log_file.open("a", encoding="utf-8", newline="\n")
+    try:
+        process = subprocess.Popen(
+            command or build_settings_window_command(signal_path=signal_path, persistent=True),
             cwd=Path.cwd(),
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=log,
-            check=False,
+            creationflags=_detached_creationflags(),
+            close_fds=True,
         )
-    return completed.returncode
+    except Exception:
+        log.close()
+        raise
+    log.close()
+    return process
 
 
-def build_settings_window_command() -> list[str]:
-    return [_pythonw_executable(), "-m", "ai_ime.settings_window"]
+def build_settings_window_command(signal_path: Path | None = None, persistent: bool = False) -> list[str]:
+    command = [_pythonw_executable(), "-m", "ai_ime.settings_window"]
+    if persistent:
+        command.append("--persistent")
+        command.extend(["--show-signal", str(signal_path or default_settings_show_signal_path())])
+    return command
 
 
 def _apply_listener_settings(logger: KeyboardLogger, settings: AppSettings) -> None:
@@ -175,6 +252,19 @@ def _pythonw_executable() -> str:
         if pythonw.exists():
             return str(pythonw)
     return str(executable)
+
+
+def _detached_creationflags() -> int:
+    if not sys.platform.startswith("win"):
+        return 0
+    return subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+
+
+def _signal_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except FileNotFoundError:
+        return 0.0
 
 
 def _build_icon() -> Image.Image:
