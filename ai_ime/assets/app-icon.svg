@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="AI IME">
+  <defs>
+    <linearGradient id="shell" x1="42" y1="28" x2="214" y2="228" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#14324A"/>
+      <stop offset="0.55" stop-color="#101828"/>
+      <stop offset="1" stop-color="#0F2F28"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="66" y1="64" x2="200" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6EE7F9"/>
+      <stop offset="0.52" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#34D399"/>
+    </linearGradient>
+    <filter id="shadow" x="18" y="14" width="220" height="230" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#020617" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect x="32" y="24" width="192" height="208" rx="44" fill="url(#shell)" filter="url(#shadow)"/>
+  <rect x="48" y="42" width="160" height="172" rx="34" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="6"/>
+  <path d="M74 168L112 82h24l38 86h-24l-7-18h-39l-7 18H74zm38-38h24l-12-31-12 31z" fill="#F8FAFC"/>
+  <rect x="179" y="82" width="22" height="86" rx="11" fill="url(#accent)"/>
+  <path d="M76 190h104" stroke="url(#accent)" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="194" cy="190" r="10" fill="#34D399"/>
+</svg>

@@ -128,11 +128,16 @@ button {
   width: 42px;
   height: 42px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--nav);
-  font-weight: 800;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
+}
+
+.brand-mark svg {
+  width: 42px;
+  height: 42px;
+  display: block;
 }
 
 .brand strong,

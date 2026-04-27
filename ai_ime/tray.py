@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ai_ime.analysis_scheduler import AdaptiveAnalysisScheduler
 from ai_ime.config import default_data_dir, load_env_file
+from ai_ime.icons import app_icon_path
 from ai_ime.learning import AutoLearningEngine
 from ai_ime.listener import KeyLogEntry, KeyLogWriter
 from ai_ime.rime.paths import detect_active_schema, find_existing_user_dir
@@ -268,6 +269,10 @@ def _signal_mtime(path: Path) -> float:
 
 
 def _build_icon() -> Image.Image:
+    try:
+        return Image.open(app_icon_path()).convert("RGBA").resize((64, 64), Image.Resampling.LANCZOS)
+    except Exception:
+        pass
     image = Image.new("RGB", (64, 64), "#101828")
     draw = ImageDraw.Draw(image)
     try:

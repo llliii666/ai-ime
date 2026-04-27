@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from ai_ime.icons import app_icon_path
 from ai_ime.shortcut import build_shortcut_spec, create_desktop_shortcut
 
 
@@ -25,7 +26,7 @@ class ShortcutTests(unittest.TestCase):
             self.assertEqual(spec.target, pythonw)
             self.assertEqual(spec.arguments, "-m ai_ime.app")
             self.assertEqual(spec.working_directory, root)
-            self.assertEqual(spec.icon_location, f"{pythonw},0")
+            self.assertEqual(spec.icon_location, f"{app_icon_path()},0")
 
     def test_build_shortcut_spec_accepts_custom_path_and_name_suffix(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

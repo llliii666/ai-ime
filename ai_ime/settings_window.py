@@ -7,6 +7,7 @@ from importlib import resources
 from pathlib import Path
 
 from ai_ime.config import default_data_dir
+from ai_ime.icons import app_icon_path, app_icon_svg
 from ai_ime.signals import default_settings_show_signal_path
 from ai_ime.ui_api import SettingsApi
 
@@ -46,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     storage_path = default_data_dir() / "webview"
     storage_path.mkdir(parents=True, exist_ok=True)
     try:
-        webview.start(debug=args.debug, private_mode=False, storage_path=str(storage_path))
+        webview.start(debug=args.debug, private_mode=False, storage_path=str(storage_path), icon=str(app_icon_path()))
         return 0
     finally:
         stop_event.set()
@@ -62,6 +63,7 @@ def render_settings_html(api: SettingsApi) -> str:
     js = _read_ui_resource("settings.js")
     initial_state = json.dumps(api.load_state(), ensure_ascii=False)
     html = html.replace('    <link rel="stylesheet" href="./settings.css" />', f"    <style>\n{css}\n    </style>")
+    html = html.replace("__APP_ICON_SVG__", app_icon_svg())
     html = html.replace(
         '    <script src="./settings.js"></script>',
         f'    <script id="initial-state" type="application/json">{_escape_script_json(initial_state)}</script>\n'

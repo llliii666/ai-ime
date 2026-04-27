@@ -6,6 +6,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from ai_ime.icons import app_icon_path
+
 DEFAULT_SHORTCUT_NAME = "AI IME"
 
 
@@ -43,7 +45,7 @@ def build_shortcut_spec(
         arguments="-m ai_ime.app",
         working_directory=project_root,
         description="启动 AI IME 托盘程序",
-        icon_location=f"{target},0",
+        icon_location=f"{app_icon_path()},0",
     )
 
 

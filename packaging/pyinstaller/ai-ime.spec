@@ -6,7 +6,9 @@ from pathlib import Path
 project_root = Path(SPECPATH).parents[1]
 datas = [
     (str(project_root / "ai_ime" / "ui"), "ai_ime/ui"),
+    (str(project_root / "ai_ime" / "assets"), "ai_ime/assets"),
 ]
+app_icon = project_root / "ai_ime" / "assets" / "app.ico"
 
 a = Analysis(
     [str(project_root / "run.py")],
@@ -45,6 +47,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(app_icon),
 )
 
 coll = COLLECT(

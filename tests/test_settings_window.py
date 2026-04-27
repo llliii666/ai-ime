@@ -55,6 +55,8 @@ class SettingsWindowTests(unittest.TestCase):
 
             self.assertIn("<style>", html)
             self.assertIn('id="initial-state"', html)
+            self.assertIn('aria-label="AI IME"', html)
+            self.assertNotIn("__APP_ICON_SVG__", html)
             self.assertIn('id="recordList"', html)
             self.assertIn('id="provider_preset"', html)
             self.assertIn('id="model_select"', html)
