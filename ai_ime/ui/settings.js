@@ -595,6 +595,7 @@ function renderAnalysisNowResult(response) {
   summary.appendChild(analysisSummaryItem("键盘日志", `${response.sentKeylogCount ?? 0}/${response.keylogCount ?? 0}`));
   summary.appendChild(analysisSummaryItem("模型返回", `${response.returnedRules ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("写入规则", `${response.upsertedRules ?? 0} 条`));
+  summary.appendChild(analysisSummaryItem("Rime 部署", response.deployed ? (response.rimeRedeployed ? "已部署" : "已写入") : "未触发"));
   summary.appendChild(analysisSummaryItem("本地拒绝", `${response.rejectedRules ?? 0} 条`));
   summary.appendChild(analysisSummaryItem("清理日志", formatBytes(response.deletedKeylogBytes ?? 0)));
   container.appendChild(summary);

@@ -430,6 +430,7 @@ def handle_deploy_rime(args: argparse.Namespace) -> int:
         semantic_logger_enabled=not args.disable_semantic_logger,
     )
     print(f"Deployed Rime dictionary: {result.dictionary_path}")
+    print(f"Deployed Rime support schema: {result.support_schema_path}")
     if result.patch_applied:
         print(f"Deployed Rime schema patch: {result.patch_path}")
     else:

@@ -253,6 +253,37 @@ class AnalysisSchedulerTests(unittest.TestCase):
             self.assertEqual(state.last_keylog_offset, 0)
             self.assertEqual(keylog_path.read_text(encoding="utf-8"), "")
 
+    def test_run_once_deploys_accepted_rules_to_rime_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            rime_dir = Path(tmp) / "Rime"
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                insert_event(conn, CorrectionEvent("xainzai", "xianzai", "现在", source="test"))
+            settings = AppSettings(
+                auto_analyze_with_ai=True,
+                auto_deploy_rime=True,
+                provider="openai-compatible",
+                keylog_file=str(keylog_path),
+                rime_dir=str(rime_dir),
+                rime_schema="rime_ice",
+            )
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with (
+                patch("ai_ime.analysis_scheduler._build_provider", return_value=FakeProvider()),
+                patch("ai_ime.analysis_scheduler.run_weasel_deployer", return_value=True),
+                patch("ai_ime.analysis_scheduler._append_learning_log"),
+            ):
+                result = scheduler.run_once()
+
+            self.assertTrue(result.deployed)
+            self.assertTrue(result.rime_redeployed)
+            self.assertIn("现在\txainzai", (rime_dir / "ai_typo.dict.yaml").read_text(encoding="utf-8"))
+            self.assertTrue((rime_dir / "rime_ice.custom.yaml").exists())
+
     def test_run_once_with_keylog_does_not_resend_old_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "ai-ime.db"

@@ -16,7 +16,9 @@ from ai_ime.rime.generator import (
     render_dictionary,
     render_lua_logger,
     render_lua_processor_patch,
+    render_schema_dependency_patch,
     render_schema_patch,
+    render_support_schema,
     render_typo_translator_patch,
 )
 
@@ -26,6 +28,7 @@ MANIFEST_FILE = "manifest.json"
 @dataclass(frozen=True)
 class DeploymentResult:
     dictionary_path: Path
+    support_schema_path: Path
     patch_path: Path
     lua_path: Path
     rime_lua_path: Path | None
@@ -46,6 +49,7 @@ def deploy_rime_files(
     rime_dir.mkdir(parents=True, exist_ok=True)
     backup_dir = _create_backup_dir(rime_dir)
     dictionary_path = rime_dir / f"{dictionary_id}.dict.yaml"
+    support_schema_path = rime_dir / f"{dictionary_id}.schema.yaml"
     patch_path = rime_dir / f"{schema_id}.custom.yaml"
     lua_path = rime_dir / "lua" / "ai_ime_logger.lua"
     rime_lua_path = rime_dir / "rime.lua"
@@ -56,6 +60,12 @@ def deploy_rime_files(
 
     dictionary_path.write_text(
         render_dictionary(rules, dictionary_id=dictionary_id, base_dictionary=base_dictionary),
+        encoding="utf-8",
+        newline="\n",
+    )
+    _backup_target(support_schema_path, backup_dir, manifest, root=rime_dir)
+    support_schema_path.write_text(
+        render_support_schema(dictionary_id=dictionary_id),
         encoding="utf-8",
         newline="\n",
     )
@@ -81,6 +91,7 @@ def deploy_rime_files(
     _write_manifest(backup_dir, manifest)
     return DeploymentResult(
         dictionary_path=dictionary_path,
+        support_schema_path=support_schema_path,
         patch_path=patch_path,
         lua_path=lua_path,
         rime_lua_path=legacy_rime_lua_path,
@@ -168,6 +179,9 @@ def _patch_body_lines(lines: list[str], start_index: int, end_index: int, dictio
         if _is_legacy_dictionary_override(line, dictionary_id=dictionary_id):
             index += 1
             continue
+        if _is_schema_dependency_insert(line, dictionary_id=dictionary_id):
+            index += 1
+            continue
         if _is_typo_translator_insert(line, dictionary_id=dictionary_id):
             index += 1
             continue
@@ -194,6 +208,11 @@ def _is_typo_translator_insert(line: str, dictionary_id: str) -> bool:
 
 def _is_lua_processor_insert(line: str) -> bool:
     pattern = re.compile(rf"^\s*engine/processors/@[^:]+:\s*lua_processor@{re.escape(AI_IME_LUA_PROCESSOR)}\s*(?:#.*)?$")
+    return bool(pattern.match(line))
+
+
+def _is_schema_dependency_insert(line: str, dictionary_id: str) -> bool:
+    pattern = re.compile(rf"^\s*schema/dependencies/@[^:]+:\s*{re.escape(dictionary_id)}\s*(?:#.*)?$")
     return bool(pattern.match(line))
 
 
@@ -243,7 +262,11 @@ def _write_manifest(backup_dir: Path, manifest: dict[str, list[dict[str, object]
 
 
 def _render_ai_schema_patch_body(dictionary_id: str) -> str:
-    return render_lua_processor_patch() + render_typo_translator_patch(dictionary_id=dictionary_id)
+    return (
+        render_schema_dependency_patch(dictionary_id=dictionary_id)
+        + render_lua_processor_patch()
+        + render_typo_translator_patch(dictionary_id=dictionary_id)
+    )
 
 
 def _remove_legacy_rime_lua_bootstrap(

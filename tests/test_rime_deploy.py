@@ -27,6 +27,7 @@ class RimeDeployTests(unittest.TestCase):
             result = deploy_rime_files(sample_rules(), rime_dir)
 
             self.assertTrue(result.dictionary_path.exists())
+            self.assertTrue(result.support_schema_path.exists())
             self.assertTrue(result.patch_path.exists())
             self.assertTrue(result.lua_path.exists())
             self.assertIsNone(result.rime_lua_path)
@@ -34,8 +35,10 @@ class RimeDeployTests(unittest.TestCase):
 
             restored = rollback_backup(rime_dir, result.backup_dir)
             self.assertIn(result.dictionary_path, restored)
+            self.assertIn(result.support_schema_path, restored)
             self.assertIn(result.lua_path, restored)
             self.assertFalse(result.dictionary_path.exists())
+            self.assertFalse(result.support_schema_path.exists())
             self.assertFalse(result.patch_path.exists())
             self.assertFalse(result.lua_path.exists())
 
@@ -49,6 +52,7 @@ class RimeDeployTests(unittest.TestCase):
 
             self.assertTrue(result.patch_applied)
             content = existing_patch.read_text(encoding="utf-8")
+            self.assertIn("schema/dependencies/@next: ai_typo", content)
             self.assertIn("engine/translators/@before 1: table_translator@ai_typo", content)
             self.assertIn("engine/processors/@before 0: lua_processor@*ai_ime_logger", content)
             self.assertIn("ai_typo:\n    dictionary: ai_typo", content)
@@ -82,7 +86,8 @@ class RimeDeployTests(unittest.TestCase):
         merged = merge_schema_patch(content)
 
         self.assertIn("octagram:\n  __patch:\n    translator/max_homophones: 5", merged)
-        self.assertIn("\npatch:\n  engine/processors/@before 0: lua_processor@*ai_ime_logger\n", merged)
+        self.assertIn("\npatch:\n  schema/dependencies/@next: ai_typo\n", merged)
+        self.assertIn("engine/processors/@before 0: lua_processor@*ai_ime_logger", merged)
         self.assertIn("engine/translators/@before 1: table_translator@ai_typo", merged)
 
     def test_merge_schema_patch_removes_legacy_dictionary_override(self) -> None:
@@ -131,6 +136,19 @@ class RimeDeployTests(unittest.TestCase):
 
         self.assertNotIn("@before 5", merged)
         self.assertEqual(merged.count("lua_processor@*ai_ime_logger"), 1)
+        self.assertIn("menu/page_size: 9", merged)
+
+    def test_merge_schema_patch_replaces_existing_schema_dependency(self) -> None:
+        content = (
+            "patch:\n"
+            "  schema/dependencies/@before 0: ai_typo\n"
+            "  menu/page_size: 9\n"
+        )
+
+        merged = merge_schema_patch(content, dictionary_id="ai_typo")
+
+        self.assertNotIn("@before 0: ai_typo", merged)
+        self.assertEqual(merged.count("schema/dependencies/@next: ai_typo"), 1)
         self.assertIn("menu/page_size: 9", merged)
 
 

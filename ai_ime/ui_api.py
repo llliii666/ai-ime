@@ -258,6 +258,7 @@ class SettingsApi:
             "ok": True,
             "message": f"已写入 {len(rules)} 条启用规则。请在小狼毫中重新部署一次。",
             "dictionaryPath": str(result.dictionary_path),
+            "supportSchemaPath": str(result.support_schema_path),
             "patchPath": str(result.patch_path),
             "luaPath": str(result.lua_path),
             "rimeLuaPath": str(result.rime_lua_path or ""),
@@ -309,6 +310,8 @@ class SettingsApi:
             "sentEventCount": result.sent_event_count,
             "returnedRules": result.returned_rules,
             "rejectedRules": result.rejected_rules,
+            "deployed": result.deployed,
+            "rimeRedeployed": result.rime_redeployed,
             "rules": [_rule_payload(rule) for rule in result.rules],
             "rejectedRuleItems": [_rule_payload(rule) for rule in result.rejected_rule_items],
         }

@@ -11,11 +11,13 @@ from typing import Any
 from ai_ime.config import default_data_dir, default_db_path
 from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.correction.rules import classify_mistake, event_supports_rule
-from ai_ime.db import connect, init_db, list_events, upsert_rules
+from ai_ime.db import connect, init_db, list_events, list_rules, upsert_rules
 from ai_ime.learning import _append_learning_log, _build_provider
 from ai_ime.listener import KeyLogEntry, keyboard_name_to_stroke, keylog_file_lock
 from ai_ime.models import CorrectionEvent, LearnedRule
 from ai_ime.providers import ProviderError
+from ai_ime.rime.deploy import deploy_rime_files
+from ai_ime.rime.weasel import run_weasel_deployer
 from ai_ime.settings import AppSettings, resolved_keylog_path
 
 INTERVAL_TIERS_SECONDS = (600, 1800, 3600, 7200, 18000, 28800, 43200)
@@ -47,6 +49,8 @@ class AnalysisRunResult:
     deleted_keylog_bytes: int = 0
     rules: tuple[LearnedRule, ...] = ()
     rejected_rule_items: tuple[LearnedRule, ...] = ()
+    deployed: bool = False
+    rime_redeployed: bool = False
 
 
 class AdaptiveAnalysisScheduler:
@@ -122,6 +126,15 @@ class AdaptiveAnalysisScheduler:
         with closing(connect(self.db_path)) as conn:
             init_db(conn)
             upserted = upsert_rules(conn, accepted_rules)
+        deployed = False
+        rime_redeployed = False
+        deploy_error = ""
+        if accepted_rules and self.settings.auto_deploy_rime and self.settings.rime_dir:
+            try:
+                deployed, rime_redeployed = _deploy_enabled_rules(self.settings, self.db_path)
+            except Exception as exc:
+                deploy_error = str(exc)
+                _append_learning_log(f"scheduled AI analysis Rime deploy failed: {exc}")
         max_event_id = max((event.id or 0 for event in events), default=state.last_analyzed_event_id)
         saved_keylog_offset = next_offset
         deleted_keylog_bytes = 0
@@ -141,11 +154,18 @@ class AdaptiveAnalysisScheduler:
         _append_learning_log(
             "scheduled AI analysis "
             f"events={len(events_for_provider)}/{len(new_events)} keylogs={len(keylog_payload)}/{len(keylog_entries)} "
-            f"rules={upserted} rejected={rejected} deleted_keylog_bytes={deleted_keylog_bytes} next={next_interval}s"
+            f"rules={upserted} rejected={rejected} deployed={deployed} redeployed={rime_redeployed} "
+            f"deleted_keylog_bytes={deleted_keylog_bytes} next={next_interval}s"
         )
         message = "AI analysis completed"
         if rejected:
             message += f"; rejected {rejected} unsupported rule(s)"
+        if deployed:
+            message += "; Rime rules deployed"
+            if not rime_redeployed:
+                message += "; manual Weasel redeploy may still be required"
+        if deploy_error:
+            message += f"; Rime deploy failed: {deploy_error}"
         return AnalysisRunResult(
             True,
             upserted,
@@ -160,6 +180,8 @@ class AdaptiveAnalysisScheduler:
             deleted_keylog_bytes=deleted_keylog_bytes,
             rules=tuple(accepted_rules),
             rejected_rule_items=tuple(rejected_rule_items),
+            deployed=deployed,
+            rime_redeployed=rime_redeployed,
         )
 
     def _run_loop(self) -> None:
@@ -173,6 +195,22 @@ class AdaptiveAnalysisScheduler:
 
 def should_send_keylog_entries(settings: AppSettings) -> bool:
     return settings.provider == "ollama" or settings.send_full_keylog
+
+
+def _deploy_enabled_rules(settings: AppSettings, db_path: Path) -> tuple[bool, bool]:
+    with closing(connect(db_path)) as conn:
+        init_db(conn)
+        rules = list_rules(conn, enabled_only=True)
+    deploy_rime_files(
+        rules,
+        rime_dir=Path(settings.rime_dir),
+        schema_id=settings.rime_schema,
+        dictionary_id=settings.rime_dictionary,
+        base_dictionary=settings.rime_base_dictionary,
+        semantic_log_path=resolved_keylog_path(settings),
+        semantic_logger_enabled=settings.record_candidate_commits,
+    )
+    return True, run_weasel_deployer()
 
 
 def keylog_payload_for_settings(settings: AppSettings, entries: list[KeyLogEntry]) -> list[KeyLogEntry]:

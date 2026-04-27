@@ -9,6 +9,7 @@ from ai_ime.rime.generator import (
     render_dictionary,
     render_lua_logger,
     render_schema_patch,
+    render_support_schema,
 )
 
 
@@ -28,6 +29,7 @@ class RimeGeneratorTests(unittest.TestCase):
             ]
         )
         self.assertNotIn("import_tables:", content)
+        self.assertIn("use_preset_vocabulary: false", content)
         self.assertIn("现在\txainzai\t141000", content)
 
     def test_render_dictionary_can_import_base_dictionary_when_requested(self) -> None:
@@ -66,10 +68,18 @@ class RimeGeneratorTests(unittest.TestCase):
     def test_render_schema_patch_adds_dedicated_typo_translator(self) -> None:
         content = render_schema_patch()
 
+        self.assertIn("schema/dependencies/@next: ai_typo", content)
         self.assertIn("engine/translators/@before 1: table_translator@ai_typo", content)
         self.assertIn("engine/processors/@before 0: lua_processor@*ai_ime_logger", content)
         self.assertIn("ai_typo:\n    dictionary: ai_typo", content)
         self.assertNotIn("translator/dictionary: ai_typo", content)
+
+    def test_render_support_schema_compiles_typo_dictionary(self) -> None:
+        content = render_support_schema()
+
+        self.assertIn("schema_id: ai_typo", content)
+        self.assertIn("translator:\n  dictionary: ai_typo", content)
+        self.assertIn("table_translator", content)
 
     def test_render_lua_logger_writes_semantic_commit_fields(self) -> None:
         content = render_lua_logger(Path(r"C:\Users\tester\AppData\Local\AIIME\keylog.jsonl"))
@@ -106,6 +116,7 @@ class RimeGeneratorTests(unittest.TestCase):
             )
             self.assertTrue(dictionary_path.exists())
             self.assertTrue(patch_path.exists())
+            self.assertTrue((Path(tmp) / "ai_typo.schema.yaml").exists())
             self.assertIn("现在\txainzai", dictionary_path.read_text(encoding="utf-8"))
 
 
