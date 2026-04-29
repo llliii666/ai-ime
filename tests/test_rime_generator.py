@@ -105,8 +105,9 @@ class RimeGeneratorTests(unittest.TestCase):
         self.assertIn("LOG_PATH = [[C:\\Users\\tester\\AppData\\Local\\AIIME\\keylog.jsonl]]", content)
         self.assertIn('LOCK_PATH = LOG_PATH .. ".lock"', content)
         self.assertIn("local function acquire_lock()", content)
-        self.assertIn('"source":', content)
-        self.assertIn('"candidate_text":', content)
+        self.assertIn("write_string_field", content)
+        self.assertIn('write_string_field(file, first, "source", "rime-lua", true)', content)
+        self.assertIn('write_string_field(file, first, "candidate_text", event.candidate_text, false)', content)
         self.assertIn("commit_notifier:connect", content)
 
     def test_remove_lua_bootstrap_removes_generated_block(self) -> None:

@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from ai_ime.config import default_data_dir
+from ai_ime.logging_utils import rotate_log_file
 from ai_ime.runtime import (
     clear_pid_file,
     is_pid_running,
@@ -65,6 +66,7 @@ def start_background(force: bool = False) -> int:
 
     log_file = default_data_dir() / "tray.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    rotate_log_file(log_file)
     with log_file.open("a", encoding="utf-8", newline="\n") as log:
         process = subprocess.Popen(
             build_tray_command(),

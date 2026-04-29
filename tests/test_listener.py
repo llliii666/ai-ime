@@ -12,6 +12,7 @@ from ai_ime.listener import (
     keylog_file_lock,
     keylog_to_sequence,
     read_keylog,
+    should_record_raw_key_event,
 )
 
 
@@ -24,6 +25,11 @@ class ListenerTests(unittest.TestCase):
         self.assertEqual(keyboard_name_to_stroke("numpad 2"), KeyStroke("2"))
         self.assertEqual(keyboard_name_to_stroke("backspace"), KeyStroke("backspace"))
         self.assertIsNone(keyboard_name_to_stroke("shift"))
+
+    def test_should_record_raw_key_event_keeps_only_key_down_events(self) -> None:
+        self.assertTrue(should_record_raw_key_event("down"))
+        self.assertFalse(should_record_raw_key_event("up"))
+        self.assertFalse(should_record_raw_key_event(""))
 
     def test_key_log_writer_writes_jsonl(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
