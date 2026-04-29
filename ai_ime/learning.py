@@ -12,6 +12,7 @@ from ai_ime.correction.detector import CONFIRM_KEYS, CorrectionDetector, KeyStro
 from ai_ime.correction.rules import aggregate_rules, event_supports_rule
 from ai_ime.db import connect, init_db, insert_event, list_events, list_rules, upsert_rules
 from ai_ime.listener import KeyLogEntry, KeyLogWriter, keyboard_name_to_stroke
+from ai_ime.logging_utils import rotate_log_file
 from ai_ime.models import CorrectionEvent
 from ai_ime.providers import MockProvider, OllamaProvider, OpenAICompatibleProvider, ProviderError
 from ai_ime.rime.deploy import deploy_rime_files
@@ -201,6 +202,7 @@ def _build_provider(settings: AppSettings):
 def _append_learning_log(message: str) -> None:
     path = default_data_dir() / "learning.log"
     path.parent.mkdir(parents=True, exist_ok=True)
+    rotate_log_file(path)
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(f"[{timestamp}] {message}\n")

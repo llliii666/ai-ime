@@ -14,7 +14,8 @@ from ai_ime.analysis_scheduler import AdaptiveAnalysisScheduler
 from ai_ime.config import default_data_dir, load_env_file
 from ai_ime.icons import app_icon_path
 from ai_ime.learning import AutoLearningEngine
-from ai_ime.listener import BufferedKeyLogWriter, KeyLogEntry
+from ai_ime.listener import BufferedKeyLogWriter, KeyLogEntry, should_record_raw_key_event
+from ai_ime.logging_utils import rotate_log_file
 from ai_ime.rime.paths import detect_preferred_schema, find_existing_user_dir
 from ai_ime.runtime import acquire_single_instance, clear_pid_file, write_pid_file
 from ai_ime.settings import AppSettings, load_app_settings, resolved_keylog_path, save_app_settings
@@ -54,14 +55,15 @@ class KeyboardLogger:
                     self._learning.handle_key_event(event_type, name)
                 return
             if settings.record_full_keylog:
-                self._writer.write(
-                    KeyLogEntry(
-                        timestamp=time.time(),
-                        event_type=event_type,
-                        name=name,
-                        scan_code=getattr(event, "scan_code", None),
+                if should_record_raw_key_event(event_type):
+                    self._writer.write(
+                        KeyLogEntry(
+                            timestamp=time.time(),
+                            event_type=event_type,
+                            name=name,
+                            scan_code=getattr(event, "scan_code", None),
+                        )
                     )
-                )
             if self._learning is not None:
                 self._learning.handle_key_event(event_type, name)
 
@@ -218,6 +220,7 @@ class SettingsReloadWatcher:
 def open_settings_window_process(command: list[str] | None = None, signal_path: Path | None = None) -> subprocess.Popen[object]:
     log_file = default_data_dir() / "settings-window.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    rotate_log_file(log_file)
     log = log_file.open("a", encoding="utf-8", newline="\n")
     try:
         process = subprocess.Popen(

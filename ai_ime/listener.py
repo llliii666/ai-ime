@@ -169,6 +169,10 @@ def keyboard_name_to_stroke(name: str) -> KeyStroke | None:
     return None
 
 
+def should_record_raw_key_event(event_type: str) -> bool:
+    return event_type.strip().lower() == "down"
+
+
 def _candidate_selection_key(normalized_name: str) -> str | None:
     if normalized_name in CANDIDATE_SELECTION_KEYS:
         return normalized_name
@@ -241,9 +245,12 @@ def run_keyboard_listener(
 
     def on_event(event: Any) -> None:
         nonlocal captured
+        event_type = str(getattr(event, "event_type", ""))
+        if not should_record_raw_key_event(event_type):
+            return
         entry = KeyLogEntry(
             timestamp=time.time(),
-            event_type=str(getattr(event, "event_type", "")),
+            event_type=event_type,
             name=str(getattr(event, "name", "")),
             scan_code=getattr(event, "scan_code", None),
         )

@@ -71,11 +71,13 @@ class ProviderSchemaTests(unittest.TestCase):
                     timestamp=1.0,
                     event_type="commit",
                     name="xianzai",
+                    scan_code=45,
                     pinyin="xianzai",
                     committed_text="现在",
                     role="rime_commit",
                     source="rime-lua",
                     candidate_text="现在",
+                    candidate_comment="~ zai",
                     selection_index=0,
                     commit_key="1",
                 )
@@ -102,6 +104,10 @@ class ProviderSchemaTests(unittest.TestCase):
         self.assertIn('"role": "rime_commit"', prompt)
         self.assertIn('"source": "rime-lua"', prompt)
         self.assertIn('"candidate_text": "现在"', prompt)
+        self.assertNotIn('"timestamp"', prompt)
+        self.assertNotIn('"scan_code"', prompt)
+        self.assertNotIn('"candidate_comment"', prompt)
+        self.assertNotIn('"last_seen_at"', prompt)
         self.assertIn("不能单独生成规则", SYSTEM_PROMPT)
         self.assertIn("rime_commit(错误拼音/错误中文) -> backspace/delete -> rime_commit", SYSTEM_PROMPT)
         self.assertIn("existing_rules", SYSTEM_PROMPT)

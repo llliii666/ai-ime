@@ -152,11 +152,33 @@ local function json_string(value)
   return '"' .. json_escape(value) .. '"'
 end
 
-local function json_number_or_null(value)
-  if type(value) == "number" then
-    return tostring(value)
+local function write_separator(file, first)
+  if not first then
+    file:write(",")
   end
-  return "null"
+  return false
+end
+
+local function write_string_field(file, first, name, value, include_empty)
+  if value == nil then
+    return first
+  end
+  local text = tostring(value)
+  if text == "" and not include_empty then
+    return first
+  end
+  first = write_separator(file, first)
+  file:write(json_string(name) .. ":" .. json_string(text))
+  return first
+end
+
+local function write_number_field(file, first, name, value)
+  if type(value) ~= "number" then
+    return first
+  end
+  first = write_separator(file, first)
+  file:write(json_string(name) .. ":" .. tostring(value))
+  return first
 end
 
 local function acquire_lock()
@@ -192,17 +214,18 @@ local function append_event(event)
     return
   end
   file:write("{{")
-  file:write('"timestamp":' .. json_number_or_null(os.time()))
-  file:write(',"event_type":' .. json_string(event.event_type))
-  file:write(',"name":' .. json_string(event.name))
-  file:write(',"pinyin":' .. json_string(event.pinyin))
-  file:write(',"committed_text":' .. json_string(event.committed_text))
-  file:write(',"role":' .. json_string(event.role))
-  file:write(',"source":' .. json_string("rime-lua"))
-  file:write(',"candidate_text":' .. json_string(event.candidate_text))
-  file:write(',"candidate_comment":' .. json_string(event.candidate_comment))
-  file:write(',"selection_index":' .. json_number_or_null(event.selection_index))
-  file:write(',"commit_key":' .. json_string(event.commit_key))
+  local first = true
+  first = write_number_field(file, first, "timestamp", os.time())
+  first = write_string_field(file, first, "event_type", event.event_type, true)
+  first = write_string_field(file, first, "name", event.name, true)
+  first = write_string_field(file, first, "pinyin", event.pinyin, false)
+  first = write_string_field(file, first, "committed_text", event.committed_text, false)
+  first = write_string_field(file, first, "role", event.role, false)
+  first = write_string_field(file, first, "source", "rime-lua", true)
+  first = write_string_field(file, first, "candidate_text", event.candidate_text, false)
+  first = write_string_field(file, first, "candidate_comment", event.candidate_comment, false)
+  first = write_number_field(file, first, "selection_index", event.selection_index)
+  first = write_string_field(file, first, "commit_key", event.commit_key, false)
   file:write("}}\\n")
   file:close()
   release_lock()
