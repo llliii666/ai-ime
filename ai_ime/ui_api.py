@@ -33,6 +33,9 @@ from ai_ime.settings import (
     default_settings_path,
     env_api_key,
     load_app_settings,
+    normalize_analysis_count_threshold,
+    normalize_analysis_schedule_mode,
+    normalize_analysis_time_seconds,
     resolved_keylog_path,
     save_app_settings,
     write_provider_env,
@@ -418,6 +421,11 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
         record_candidate_commits=_as_bool(payload.get("record_candidate_commits"), True),
         send_full_keylog=_as_bool(payload.get("send_full_keylog"), False),
         delete_sent_keylog=_as_bool(payload.get("delete_sent_keylog"), True),
+        analysis_schedule_mode=normalize_analysis_schedule_mode(payload.get("analysis_schedule_mode")),
+        analysis_schedule_time_seconds=normalize_analysis_time_seconds(payload.get("analysis_schedule_time_seconds")),
+        analysis_schedule_count_threshold=normalize_analysis_count_threshold(
+            payload.get("analysis_schedule_count_threshold")
+        ),
         start_on_login=_as_bool(payload.get("start_on_login"), False),
         provider=provider,
         provider_preset=_as_string(

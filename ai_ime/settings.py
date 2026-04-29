@@ -10,6 +10,12 @@ from ai_ime.config import default_data_dir, env_value
 from ai_ime.providers.presets import infer_provider_preset
 
 SETTINGS_FILE_NAME = "settings.json"
+ANALYSIS_SCHEDULE_MODES = {"time", "count"}
+ANALYSIS_TIME_SECONDS = (0, 600, 1800, 3600, 7200, 18000, 28800, 43200)
+ANALYSIS_COUNT_THRESHOLDS = (1500, 2000, 3000, 4000, 5000)
+DEFAULT_ANALYSIS_SCHEDULE_MODE = "time"
+DEFAULT_ANALYSIS_TIME_SECONDS = 0
+DEFAULT_ANALYSIS_COUNT_THRESHOLD = 1500
 
 
 @dataclass
@@ -22,6 +28,9 @@ class AppSettings:
     record_candidate_commits: bool = True
     send_full_keylog: bool = False
     delete_sent_keylog: bool = True
+    analysis_schedule_mode: str = DEFAULT_ANALYSIS_SCHEDULE_MODE
+    analysis_schedule_time_seconds: int = DEFAULT_ANALYSIS_TIME_SECONDS
+    analysis_schedule_count_threshold: int = DEFAULT_ANALYSIS_COUNT_THRESHOLD
     start_on_login: bool = False
     provider: str = "openai-compatible"
     provider_preset: str = "openai"
@@ -66,10 +75,11 @@ def load_app_settings(path: Path | None = None) -> AppSettings:
             openai_base_url=settings.openai_base_url,
             ollama_base_url=settings.ollama_base_url,
         )
-    return settings
+    return normalize_app_settings(settings)
 
 
 def save_app_settings(settings: AppSettings, path: Path | None = None) -> Path:
+    normalize_app_settings(settings)
     settings_path = path or default_settings_path()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(
@@ -93,6 +103,15 @@ def settings_from_env() -> AppSettings:
         record_candidate_commits=env_value("AI_IME_RECORD_CANDIDATE_COMMITS", default="true").lower() != "false",
         send_full_keylog=env_value("AI_IME_SEND_FULL_KEYLOG", default="false").lower() == "true",
         delete_sent_keylog=env_value("AI_IME_DELETE_SENT_KEYLOG", default="true").lower() != "false",
+        analysis_schedule_mode=normalize_analysis_schedule_mode(
+            env_value("AI_IME_ANALYSIS_SCHEDULE_MODE", default=DEFAULT_ANALYSIS_SCHEDULE_MODE)
+        ),
+        analysis_schedule_time_seconds=normalize_analysis_time_seconds(
+            _env_int("AI_IME_ANALYSIS_SCHEDULE_TIME_SECONDS", DEFAULT_ANALYSIS_TIME_SECONDS)
+        ),
+        analysis_schedule_count_threshold=normalize_analysis_count_threshold(
+            _env_int("AI_IME_ANALYSIS_SCHEDULE_COUNT_THRESHOLD", DEFAULT_ANALYSIS_COUNT_THRESHOLD)
+        ),
         provider=provider,
         provider_preset=env_value(
             "AI_IME_PROVIDER_PRESET",
@@ -118,6 +137,13 @@ def write_provider_env(settings: AppSettings, api_key: str | None = None, path: 
             "AI_IME_RECORD_CANDIDATE_COMMITS": "true" if settings.record_candidate_commits else "false",
             "AI_IME_SEND_FULL_KEYLOG": "true" if settings.send_full_keylog else "false",
             "AI_IME_DELETE_SENT_KEYLOG": "true" if settings.delete_sent_keylog else "false",
+            "AI_IME_ANALYSIS_SCHEDULE_MODE": normalize_analysis_schedule_mode(settings.analysis_schedule_mode),
+            "AI_IME_ANALYSIS_SCHEDULE_TIME_SECONDS": str(
+                normalize_analysis_time_seconds(settings.analysis_schedule_time_seconds)
+            ),
+            "AI_IME_ANALYSIS_SCHEDULE_COUNT_THRESHOLD": str(
+                normalize_analysis_count_threshold(settings.analysis_schedule_count_threshold)
+            ),
             "AI_IME_PROVIDER": settings.provider,
             "AI_IME_PROVIDER_PRESET": settings.provider_preset,
             "AI_IME_OPENAI_BASE_URL": settings.openai_base_url,
@@ -132,6 +158,30 @@ def write_provider_env(settings: AppSettings, api_key: str | None = None, path: 
     lines = [f"{key}={_quote_env_value(value)}" for key, value in sorted(existing.items())]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return path
+
+
+def normalize_app_settings(settings: AppSettings) -> AppSettings:
+    settings.analysis_schedule_mode = normalize_analysis_schedule_mode(settings.analysis_schedule_mode)
+    settings.analysis_schedule_time_seconds = normalize_analysis_time_seconds(settings.analysis_schedule_time_seconds)
+    settings.analysis_schedule_count_threshold = normalize_analysis_count_threshold(
+        settings.analysis_schedule_count_threshold
+    )
+    return settings
+
+
+def normalize_analysis_schedule_mode(value: Any) -> str:
+    mode = str(value or "").strip().lower()
+    return mode if mode in ANALYSIS_SCHEDULE_MODES else DEFAULT_ANALYSIS_SCHEDULE_MODE
+
+
+def normalize_analysis_time_seconds(value: Any) -> int:
+    seconds = _as_int(value, DEFAULT_ANALYSIS_TIME_SECONDS)
+    return seconds if seconds in ANALYSIS_TIME_SECONDS else DEFAULT_ANALYSIS_TIME_SECONDS
+
+
+def normalize_analysis_count_threshold(value: Any) -> int:
+    threshold = _as_int(value, DEFAULT_ANALYSIS_COUNT_THRESHOLD)
+    return threshold if threshold in ANALYSIS_COUNT_THRESHOLDS else DEFAULT_ANALYSIS_COUNT_THRESHOLD
 
 
 def _read_env_map(path: Path) -> dict[str, str]:
@@ -154,6 +204,25 @@ def _quote_env_value(value: Any) -> str:
     if any(char.isspace() for char in text) or "#" in text:
         return json.dumps(text, ensure_ascii=False)
     return text
+
+
+def _env_int(name: str, default: int) -> int:
+    return _as_int(env_value(name, default=str(default)), default)
+
+
+def _as_int(value: Any, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return default
+    return default
 
 
 def _unquote_env_value(value: str) -> str:
