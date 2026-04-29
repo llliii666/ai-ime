@@ -7,6 +7,10 @@ from pathlib import Path
 
 def candidate_weasel_deployers() -> list[Path]:
     candidates: list[Path] = []
+    configured = os.environ.get("AI_IME_WEASEL_DEPLOYER")
+    if configured:
+        candidates.append(Path(configured))
+    candidates.extend(_running_weasel_deployer_candidates())
     for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
         root = os.environ.get(env_name)
         if root:
@@ -37,6 +41,35 @@ def run_weasel_deployer(deployer: Path | None = None, timeout: float = 30.0) -> 
     except Exception:
         return False
     return completed.returncode == 0
+
+
+def _running_weasel_deployer_candidates() -> list[Path]:
+    if os.name != "nt":
+        return []
+    try:
+        completed = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-Process WeaselServer -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+            check=False,
+        )
+    except Exception:
+        return []
+    if completed.returncode != 0:
+        return []
+
+    candidates: list[Path] = []
+    for line in completed.stdout.splitlines():
+        server_path = Path(line.strip())
+        if server_path.name.lower() == "weaselserver.exe":
+            candidates.append(server_path.with_name("WeaselDeployer.exe"))
+    return candidates
 
 
 def _dedupe(paths: list[Path]) -> list[Path]:

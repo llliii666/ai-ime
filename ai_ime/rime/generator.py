@@ -89,6 +89,7 @@ engine:
 
 translator:
   dictionary: {dictionary_id}
+  enable_completion: false
   enable_sentence: false
   enable_user_dict: false
   initial_quality: 50
@@ -106,6 +107,7 @@ def render_typo_translator_patch(dictionary_id: str = "ai_typo") -> str:
         f"  engine/translators/@before 1: table_translator@{dictionary_id}\n"
         f"  {dictionary_id}:\n"
         f"    dictionary: {dictionary_id}\n"
+        "    enable_completion: false\n"
         "    enable_sentence: false\n"
         "    enable_user_dict: false\n"
         "    initial_quality: 50\n"

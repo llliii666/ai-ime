@@ -123,6 +123,7 @@ class RimeDeployTests(unittest.TestCase):
         self.assertIn("engine/processors/@before 0: lua_processor@*ai_ime_logger", merged)
         self.assertIn("engine/translators/@before 1: table_translator@ai_typo", merged)
         self.assertIn("ai_typo:\n    dictionary: ai_typo", merged)
+        self.assertIn("enable_completion: false", merged)
         self.assertIn("menu/page_size: 9", merged)
 
     def test_merge_schema_patch_replaces_existing_lua_processor(self) -> None:
