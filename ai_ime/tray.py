@@ -14,7 +14,7 @@ from ai_ime.analysis_scheduler import AdaptiveAnalysisScheduler
 from ai_ime.config import default_data_dir, load_env_file
 from ai_ime.icons import app_icon_path
 from ai_ime.learning import AutoLearningEngine
-from ai_ime.listener import KeyLogEntry, KeyLogWriter
+from ai_ime.listener import BufferedKeyLogWriter, KeyLogEntry
 from ai_ime.rime.paths import detect_preferred_schema, find_existing_user_dir
 from ai_ime.runtime import acquire_single_instance, clear_pid_file, write_pid_file
 from ai_ime.settings import AppSettings, load_app_settings, resolved_keylog_path, save_app_settings
@@ -28,6 +28,7 @@ class KeyboardLogger:
         self._keyboard: Any = None
         self._learning: AutoLearningEngine | None = None
         self._analysis_scheduler: AdaptiveAnalysisScheduler | None = None
+        self._writer: BufferedKeyLogWriter | None = None
 
     @property
     def running(self) -> bool:
@@ -43,7 +44,7 @@ class KeyboardLogger:
         if settings.auto_analyze_with_ai:
             self._analysis_scheduler = AdaptiveAnalysisScheduler(settings)
             self._analysis_scheduler.start()
-        writer = KeyLogWriter(resolved_keylog_path(settings))
+        self._writer = BufferedKeyLogWriter(resolved_keylog_path(settings)) if settings.record_full_keylog else None
 
         def on_event(event: Any) -> None:
             event_type = str(getattr(event, "event_type", ""))
@@ -53,7 +54,7 @@ class KeyboardLogger:
                     self._learning.handle_key_event(event_type, name)
                 return
             if settings.record_full_keylog:
-                writer.write(
+                self._writer.write(
                     KeyLogEntry(
                         timestamp=time.time(),
                         event_type=event_type,
@@ -74,6 +75,9 @@ class KeyboardLogger:
         if self._analysis_scheduler is not None:
             self._analysis_scheduler.stop()
         self._analysis_scheduler = None
+        if self._writer is not None:
+            self._writer.close()
+        self._writer = None
 
 
 def main(argv: list[str] | None = None) -> int:

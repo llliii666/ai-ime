@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import time
@@ -7,7 +8,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from threading import Event
+from queue import Empty, Queue
+from threading import Event, Thread
 from typing import Any
 
 from ai_ime.correction.detector import CANDIDATE_SELECTION_KEYS, DELETE_KEYS, KeyStroke
@@ -41,12 +43,73 @@ class KeyLogWriter:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with keylog_file_lock(self.path):
             with self.path.open("a", encoding="utf-8", newline="\n") as handle:
-                payload = {
-                    key: value
-                    for key, value in asdict(entry).items()
-                    if value is not None and (not isinstance(value, str) or value or key in {"event_type", "name"})
-                }
-                handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+                handle.write(_serialize_keylog_entry(entry) + "\n")
+
+
+class BufferedKeyLogWriter:
+    def __init__(self, path: Path, flush_interval: float = 0.2, max_batch_size: int = 32) -> None:
+        self.path = path
+        self.flush_interval = flush_interval
+        self.max_batch_size = max_batch_size
+        self._queue: Queue[object] = Queue()
+        self._thread = Thread(target=self._run, name="AIIMEKeyLogFlush", daemon=True)
+        self._closed = False
+        self._thread.start()
+        atexit.register(self.close)
+
+    def write(self, entry: KeyLogEntry) -> None:
+        if self._closed:
+            raise RuntimeError("BufferedKeyLogWriter is closed")
+        self._queue.put(_serialize_keylog_entry(entry))
+
+    def flush(self, timeout: float = 3.0) -> None:
+        if self._closed:
+            return
+        marker = Event()
+        self._queue.put(_FlushRequest(marker))
+        if not marker.wait(timeout):
+            raise TimeoutError("Timed out waiting for keylog flush")
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self.flush()
+        self._closed = True
+        self._queue.put(_STOP_WRITER)
+        self._thread.join(timeout=3.0)
+
+    def _run(self) -> None:
+        batch: list[str] = []
+        while True:
+            try:
+                item = self._queue.get(timeout=self.flush_interval)
+            except Empty:
+                self._flush_batch(batch)
+                batch = []
+                continue
+            try:
+                if item is _STOP_WRITER:
+                    self._flush_batch(batch)
+                    return
+                if isinstance(item, _FlushRequest):
+                    self._flush_batch(batch)
+                    batch = []
+                    item.event.set()
+                    continue
+                batch.append(str(item))
+                if len(batch) >= self.max_batch_size:
+                    self._flush_batch(batch)
+                    batch = []
+            finally:
+                self._queue.task_done()
+
+    def _flush_batch(self, batch: list[str]) -> None:
+        if not batch:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with keylog_file_lock(self.path):
+            with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write("\n".join(batch) + "\n")
 
 
 @contextmanager
@@ -222,3 +285,20 @@ def _optional_int(value: Any) -> int | None:
         except ValueError:
             return None
     return None
+
+
+@dataclass(frozen=True)
+class _FlushRequest:
+    event: Event
+
+
+_STOP_WRITER = object()
+
+
+def _serialize_keylog_entry(entry: KeyLogEntry) -> str:
+    payload = {
+        key: value
+        for key, value in asdict(entry).items()
+        if value is not None and (not isinstance(value, str) or value or key in {"event_type", "name"})
+    }
+    return json.dumps(payload, ensure_ascii=False)

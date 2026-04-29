@@ -45,6 +45,7 @@ class SettingsTests(unittest.TestCase):
             self.assertIn("AI_IME_PROVIDER_PRESET=deepseek", content)
             self.assertIn("AI_IME_OPENAI_MODEL=gpt-5.4-mini", content)
             self.assertIn("AI_IME_OPENAI_API_KEY=test-key", content)
+            self.assertIn("AI_IME_RECORD_FULL_KEYLOG=false", content)
             self.assertIn("AI_IME_RECORD_CANDIDATE_COMMITS=true", content)
             self.assertIn("AI_IME_DELETE_SENT_KEYLOG=true", content)
 

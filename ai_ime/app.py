@@ -9,7 +9,13 @@ import time
 from pathlib import Path
 
 from ai_ime.config import default_data_dir
-from ai_ime.runtime import clear_pid_file, is_pid_running, pid_file_path, read_pid_file
+from ai_ime.runtime import (
+    clear_pid_file,
+    is_pid_running,
+    pid_file_path,
+    pid_record_matches_process,
+    read_pid_record,
+)
 from ai_ime.startup import default_project_root, default_pythonw_executable
 
 
@@ -49,10 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def start_background(force: bool = False) -> int:
-    existing_pid = read_pid_file()
-    if existing_pid and is_pid_running(existing_pid) and not force:
+    existing_record = read_pid_record()
+    existing_pid = existing_record.pid if existing_record is not None else None
+    if pid_record_matches_process(existing_record) and not force:
         print(f"AI IME already appears to be running with pid {existing_pid}.")
         return 0
+    if existing_record is not None and not pid_record_matches_process(existing_record):
+        clear_pid_file()
 
     log_file = default_data_dir() / "tray.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -81,8 +90,9 @@ def start_background(force: bool = False) -> int:
 
 
 def print_status() -> int:
-    pid = read_pid_file()
-    if pid and is_pid_running(pid):
+    record = read_pid_record()
+    pid = record.pid if record is not None else None
+    if pid_record_matches_process(record):
         print(f"AI IME is running with tray pid {pid}.")
         return 0
     print("AI IME is not running.")
@@ -90,11 +100,12 @@ def print_status() -> int:
 
 
 def stop_background() -> int:
-    pid = read_pid_file()
+    record = read_pid_record()
+    pid = record.pid if record is not None else None
     if not pid:
         print("AI IME is not running.")
         return 0
-    if not is_pid_running(pid):
+    if not pid_record_matches_process(record):
         clear_pid_file()
         print("AI IME pid file was stale and has been cleared.")
         return 0
@@ -129,8 +140,9 @@ def _detached_creationflags() -> int:
 def _wait_for_runtime_pid(launcher_pid: int, timeout: float = 5.0) -> int:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        runtime_pid = read_pid_file()
-        if runtime_pid and is_pid_running(runtime_pid):
+        runtime_record = read_pid_record()
+        runtime_pid = runtime_record.pid if runtime_record is not None else None
+        if pid_record_matches_process(runtime_record):
             return runtime_pid
         if not is_pid_running(launcher_pid):
             return 0

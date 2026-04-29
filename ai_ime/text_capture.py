@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 CJK_RUN_PATTERN = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]+")
+MAX_DOCUMENT_TEXT_CHARS = 4096
 
 
 class FocusTextReader:
@@ -105,7 +106,7 @@ def _read_text_pattern(control: object) -> str | None:
     try:
         pattern = control.GetTextPattern()  # type: ignore[attr-defined]
         document_range = getattr(pattern, "DocumentRange", None)
-        value = document_range.GetText(-1) if document_range is not None else None
+        value = document_range.GetText(MAX_DOCUMENT_TEXT_CHARS) if document_range is not None else None
     except Exception:
         return None
     if isinstance(value, str) and value.strip():

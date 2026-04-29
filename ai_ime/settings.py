@@ -18,7 +18,7 @@ class AppSettings:
     auto_learn_enabled: bool = True
     auto_analyze_with_ai: bool = False
     auto_deploy_rime: bool = True
-    record_full_keylog: bool = True
+    record_full_keylog: bool = False
     record_candidate_commits: bool = True
     send_full_keylog: bool = False
     delete_sent_keylog: bool = True
@@ -89,7 +89,9 @@ def settings_from_env() -> AppSettings:
         auto_learn_enabled=env_value("AI_IME_AUTO_LEARN", default="true").lower() != "false",
         auto_analyze_with_ai=env_value("AI_IME_AUTO_ANALYZE_WITH_AI", default="false").lower() == "true",
         auto_deploy_rime=env_value("AI_IME_AUTO_DEPLOY_RIME", default="true").lower() != "false",
+        record_full_keylog=env_value("AI_IME_RECORD_FULL_KEYLOG", default="false").lower() == "true",
         record_candidate_commits=env_value("AI_IME_RECORD_CANDIDATE_COMMITS", default="true").lower() != "false",
+        send_full_keylog=env_value("AI_IME_SEND_FULL_KEYLOG", default="false").lower() == "true",
         delete_sent_keylog=env_value("AI_IME_DELETE_SENT_KEYLOG", default="true").lower() != "false",
         provider=provider,
         provider_preset=env_value(
@@ -112,7 +114,9 @@ def write_provider_env(settings: AppSettings, api_key: str | None = None, path: 
             "AI_IME_AUTO_LEARN": "true" if settings.auto_learn_enabled else "false",
             "AI_IME_AUTO_ANALYZE_WITH_AI": "true" if settings.auto_analyze_with_ai else "false",
             "AI_IME_AUTO_DEPLOY_RIME": "true" if settings.auto_deploy_rime else "false",
+            "AI_IME_RECORD_FULL_KEYLOG": "true" if settings.record_full_keylog else "false",
             "AI_IME_RECORD_CANDIDATE_COMMITS": "true" if settings.record_candidate_commits else "false",
+            "AI_IME_SEND_FULL_KEYLOG": "true" if settings.send_full_keylog else "false",
             "AI_IME_DELETE_SENT_KEYLOG": "true" if settings.delete_sent_keylog else "false",
             "AI_IME_PROVIDER": settings.provider,
             "AI_IME_PROVIDER_PRESET": settings.provider_preset,

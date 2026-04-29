@@ -65,6 +65,22 @@ class RimeGeneratorTests(unittest.TestCase):
         self.assertEqual(content.count("现在\txainzai"), 1)
         self.assertIn("现在\txainzai\t151000", content)
 
+    def test_render_dictionary_rejects_control_characters_in_rule_fields(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Invalid dictionary entry"):
+            render_dictionary(
+                [
+                    LearnedRule(
+                        wrong_pinyin="xain\tzai",
+                        correct_pinyin="xianzai",
+                        committed_text="鐜板湪",
+                        confidence=0.8,
+                        weight=141000,
+                        count=1,
+                        mistake_type="adjacent_transposition",
+                    )
+                ]
+            )
+
     def test_render_schema_patch_adds_dedicated_typo_translator(self) -> None:
         content = render_schema_patch()
 

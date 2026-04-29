@@ -17,6 +17,7 @@ class FakeControl:
         self._text = text
         self._legacy = legacy
         self._parent = parent
+        self.last_text_count: int | None = None
 
     def GetValuePattern(self) -> object:
         if self._value:
@@ -25,7 +26,7 @@ class FakeControl:
 
     def GetTextPattern(self) -> object:
         if self._text:
-            range_obj = type("Range", (), {"GetText": lambda _self, _count: self._text})()
+            range_obj = type("Range", (), {"GetText": lambda _self, _count: self._capture_text_count(_count)})()
             return type("TextPattern", (), {"DocumentRange": range_obj})()
         raise RuntimeError("no text")
 
@@ -36,6 +37,10 @@ class FakeControl:
 
     def GetParentControl(self) -> object | None:
         return self._parent
+
+    def _capture_text_count(self, count: int) -> str:
+        self.last_text_count = count
+        return self._text
 
 
 class TextCaptureTests(unittest.TestCase):
@@ -65,6 +70,14 @@ class TextCaptureTests(unittest.TestCase):
         reader = FocusTextReader(automation=FakeAutomation(control))
 
         self.assertEqual(reader.read_text(), "我现在")
+
+    def test_focus_text_reader_caps_text_pattern_length(self) -> None:
+        control = FakeControl(text="鎴戠幇鍦?")
+
+        reader = FocusTextReader(automation=FakeAutomation(control))
+
+        self.assertEqual(reader.read_text(), "鎴戠幇鍦?")
+        self.assertEqual(control.last_text_count, 4096)
 
 
 if __name__ == "__main__":
