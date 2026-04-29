@@ -88,6 +88,7 @@ class RimeGeneratorTests(unittest.TestCase):
         self.assertIn("engine/translators/@before 1: table_translator@ai_typo", content)
         self.assertIn("engine/processors/@before 0: lua_processor@*ai_ime_logger", content)
         self.assertIn("ai_typo:\n    dictionary: ai_typo", content)
+        self.assertIn("enable_completion: false", content)
         self.assertNotIn("translator/dictionary: ai_typo", content)
 
     def test_render_support_schema_compiles_typo_dictionary(self) -> None:
@@ -95,6 +96,7 @@ class RimeGeneratorTests(unittest.TestCase):
 
         self.assertIn("schema_id: ai_typo", content)
         self.assertIn("translator:\n  dictionary: ai_typo", content)
+        self.assertIn("enable_completion: false", content)
         self.assertIn("table_translator", content)
 
     def test_render_lua_logger_writes_semantic_commit_fields(self) -> None:
