@@ -7,6 +7,7 @@ from unittest.mock import patch
 from ai_ime.analysis_scheduler import (
     AdaptiveAnalysisScheduler,
     choose_next_interval,
+    choose_next_interval_for_settings,
     delete_keylog_prefix,
     events_for_analysis,
     filter_rules_by_evidence,
@@ -51,6 +52,89 @@ class AnalysisSchedulerTests(unittest.TestCase):
         self.assertEqual(choose_next_interval(1, 1800), 7200)
         self.assertEqual(choose_next_interval(0, 1800), 3600)
         self.assertEqual(choose_next_interval(0, 43200), 43200)
+
+    def test_choose_next_interval_respects_visible_schedule_settings(self) -> None:
+        self.assertEqual(
+            choose_next_interval_for_settings(
+                AppSettings(analysis_schedule_mode="time", analysis_schedule_time_seconds=3600),
+                activity_count=1200,
+                current_interval=1800,
+            ),
+            3600,
+        )
+        self.assertEqual(
+            choose_next_interval_for_settings(
+                AppSettings(analysis_schedule_mode="time", analysis_schedule_time_seconds=0),
+                activity_count=1200,
+                current_interval=1800,
+            ),
+            600,
+        )
+        self.assertEqual(
+            choose_next_interval_for_settings(
+                AppSettings(analysis_schedule_mode="count", analysis_schedule_count_threshold=1500),
+                activity_count=1,
+                current_interval=43200,
+            ),
+            600,
+        )
+
+    def test_count_schedule_waits_without_advancing_offsets_below_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            KeyLogWriter(keylog_path).write(KeyLogEntry(timestamp=1.0, event_type="down", name="x"))
+            provider = FakeProvider()
+            settings = AppSettings(
+                auto_analyze_with_ai=True,
+                analysis_schedule_mode="count",
+                analysis_schedule_count_threshold=1500,
+                provider="openai-compatible",
+                send_full_keylog=True,
+                keylog_file=str(keylog_path),
+            )
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with patch("ai_ime.analysis_scheduler._build_provider", return_value=provider), patch(
+                "ai_ime.analysis_scheduler._append_learning_log"
+            ):
+                result = scheduler.run_once()
+
+            state = load_scheduler_state(state_path)
+            self.assertFalse(result.attempted)
+            self.assertEqual(provider.keylog_count, 0)
+            self.assertEqual(result.keylog_count, 1)
+            self.assertEqual(state.last_keylog_offset, 0)
+            self.assertIn("Waiting for more typing activity", result.message)
+
+    def test_count_schedule_runs_when_threshold_is_reached(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            writer = KeyLogWriter(keylog_path)
+            for index in range(1500):
+                writer.write(KeyLogEntry(timestamp=float(index), event_type="down", name="x"))
+            provider = FakeProvider()
+            settings = AppSettings(
+                auto_analyze_with_ai=True,
+                analysis_schedule_mode="count",
+                analysis_schedule_count_threshold=1500,
+                provider="openai-compatible",
+                send_full_keylog=True,
+                keylog_file=str(keylog_path),
+            )
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with patch("ai_ime.analysis_scheduler._build_provider", return_value=provider), patch(
+                "ai_ime.analysis_scheduler._append_learning_log"
+            ):
+                result = scheduler.run_once()
+
+            self.assertTrue(result.attempted)
+            self.assertEqual(provider.keylog_count, 1500)
+            self.assertEqual(result.sent_keylog_count, 1500)
 
     def test_should_send_keylogs_for_local_or_user_opt_in(self) -> None:
         self.assertTrue(

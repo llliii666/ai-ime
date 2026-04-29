@@ -7,6 +7,9 @@ const fieldIds = [
   "record_candidate_commits",
   "send_full_keylog",
   "delete_sent_keylog",
+  "analysis_schedule_mode",
+  "analysis_schedule_time_seconds",
+  "analysis_schedule_count_threshold",
   "start_on_login",
   "provider",
   "provider_preset",
@@ -26,6 +29,25 @@ const providerLabels = {
   ollama: "Ollama",
   mock: "本地模拟",
 };
+
+const analysisTimeOptions = [
+  { value: "0", label: "默认（自适应）" },
+  { value: "600", label: "10 分钟" },
+  { value: "1800", label: "30 分钟" },
+  { value: "3600", label: "1 小时" },
+  { value: "7200", label: "2 小时" },
+  { value: "18000", label: "5 小时" },
+  { value: "28800", label: "8 小时" },
+  { value: "43200", label: "12 小时" },
+];
+
+const analysisCountOptions = [
+  { value: "1500", label: "1500 条日志" },
+  { value: "2000", label: "2000 条日志" },
+  { value: "3000", label: "3000 条日志" },
+  { value: "4000", label: "4000 条日志" },
+  { value: "5000", label: "5000 条日志" },
+];
 
 let lastState = null;
 let bridgeReady = false;
@@ -76,6 +98,10 @@ function bindUi() {
   document.getElementById("provider_preset").addEventListener("change", applyProviderPreset);
   document.getElementById("provider").addEventListener("change", handleProviderTypeChange);
   document.getElementById("listener_enabled").addEventListener("change", syncTopbar);
+  document.querySelectorAll("[data-schedule-mode]").forEach((button) => {
+    button.addEventListener("click", () => setAnalysisScheduleMode(button.dataset.scheduleMode));
+  });
+  document.getElementById("analysis_schedule_select").addEventListener("change", updateAnalysisScheduleHiddenFields);
   syncActionState();
 }
 
@@ -317,10 +343,12 @@ function fillForm(settings) {
       element.value = settings[id] ?? "";
     }
   });
+  syncAnalysisScheduleUi();
 }
 
 function collectPayload() {
   syncActiveModelInput();
+  updateAnalysisScheduleHiddenFields();
   const settings = {};
   fieldIds.forEach((id) => {
     const element = document.getElementById(id);
@@ -331,6 +359,62 @@ function collectPayload() {
     settings,
     apiKey: document.getElementById("apiKey").value.trim(),
   };
+}
+
+function setAnalysisScheduleMode(mode) {
+  const normalized = mode === "count" ? "count" : "time";
+  document.getElementById("analysis_schedule_mode").value = normalized;
+  syncAnalysisScheduleUi();
+}
+
+function syncAnalysisScheduleUi() {
+  const modeInput = document.getElementById("analysis_schedule_mode");
+  const select = document.getElementById("analysis_schedule_select");
+  if (!modeInput || !select) {
+    return;
+  }
+  const mode = modeInput.value === "count" ? "count" : "time";
+  const options = mode === "count" ? analysisCountOptions : analysisTimeOptions;
+  const stored = mode === "count"
+    ? document.getElementById("analysis_schedule_count_threshold").value || "1500"
+    : document.getElementById("analysis_schedule_time_seconds").value || "0";
+  modeInput.value = mode;
+
+  document.querySelectorAll("[data-schedule-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.scheduleMode === mode);
+  });
+  document.getElementById("analysisScheduleModeToggle")?.setAttribute("data-mode", mode);
+
+  select.replaceChildren(...options.map((item) => new Option(item.label, item.value)));
+  select.value = options.some((item) => item.value === stored) ? stored : options[0].value;
+
+  const label = document.getElementById("analysisScheduleSelectLabel");
+  const hint = document.getElementById("analysisScheduleHint");
+  const help = document.getElementById("analysisScheduleHelp");
+  if (mode === "count") {
+    label.textContent = "触发数量";
+    hint.textContent = "累计到指定日志数量后提交；未达到阈值时只检查，不会推进已读位置。";
+    help.dataset.help = "按键入日志和新纠错事件的累计数量触发模型分析。适合频繁输入时减少请求次数；达到阈值前不会上传，也不会删除待处理日志。";
+  } else {
+    label.textContent = "提交间隔";
+    hint.textContent = "默认自适应：最快 10 分钟；没有新日志时逐步降到 30 分钟、1 小时、2 小时等。";
+    help.dataset.help = "默认选项沿用 AI IME 原本的自适应规则：有大量键入时最快 10 分钟分析一次；没有新日志时自动进入更长间隔。也可以固定为 10 分钟到 12 小时。";
+  }
+  updateAnalysisScheduleHiddenFields();
+}
+
+function updateAnalysisScheduleHiddenFields() {
+  const modeInput = document.getElementById("analysis_schedule_mode");
+  const select = document.getElementById("analysis_schedule_select");
+  if (!modeInput || !select) {
+    return;
+  }
+  const mode = modeInput.value === "count" ? "count" : "time";
+  if (mode === "count") {
+    document.getElementById("analysis_schedule_count_threshold").value = select.value || "1500";
+  } else {
+    document.getElementById("analysis_schedule_time_seconds").value = select.value || "0";
+  }
 }
 
 function renderMeta(meta) {
@@ -951,7 +1035,7 @@ function applyInitialState() {
 
 function syncActionState() {
   const pending = !bridgeReady && !(window.pywebview && window.pywebview.api);
-  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, #runAnalysisNow, #addManualCorrection, #openKeylogFile, #openLearningLog, #refreshRecords, [data-browse], [data-record-kind], [data-record-tab]").forEach((button) => {
+  document.querySelectorAll("#saveSettings, #reloadState, #detectRime, #deployRime, #openRimeDir, #testProvider, #runAnalysisNow, #addManualCorrection, #openKeylogFile, #openLearningLog, #refreshRecords, #analysis_schedule_select, [data-browse], [data-record-kind], [data-record-tab], [data-schedule-mode]").forEach((button) => {
     button.disabled = pending;
     button.classList.toggle("is-pending", pending);
   });

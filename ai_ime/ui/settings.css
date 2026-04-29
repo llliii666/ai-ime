@@ -405,6 +405,87 @@ h2 {
   font-size: 12px;
 }
 
+.schedule-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+  align-items: center;
+  gap: 18px;
+  min-height: 78px;
+  border-bottom: 1px solid #eef2f7;
+  padding: 12px 0;
+}
+
+.schedule-control strong,
+.schedule-control .help-tip {
+  display: inline-grid;
+  vertical-align: middle;
+}
+
+.schedule-control small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.schedule-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.schedule-mode-toggle {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #edf3ff;
+  padding: 3px;
+}
+
+.schedule-mode-toggle::before {
+  content: "";
+  position: absolute;
+  inset: 3px auto 3px 3px;
+  width: calc(50% - 3px);
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.16);
+  transition: transform 180ms ease;
+}
+
+.schedule-mode-toggle[data-mode="count"]::before {
+  transform: translateX(100%);
+}
+
+.schedule-mode-toggle button {
+  position: relative;
+  z-index: 1;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 700;
+  transition: color 140ms ease;
+}
+
+.schedule-mode-toggle button.active {
+  color: var(--text);
+}
+
+.schedule-select {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: #344054;
+  font-size: 13px;
+}
+
 input[type="checkbox"] {
   width: 44px;
   height: 24px;

@@ -22,10 +22,17 @@ from ai_ime.models import CorrectionEvent, LearnedRule, ProviderAnalysis, RuleAu
 from ai_ime.providers import ProviderError
 from ai_ime.rime.deploy import deploy_rime_files
 from ai_ime.rime.weasel import run_weasel_deployer
-from ai_ime.settings import AppSettings, resolved_keylog_path
+from ai_ime.settings import (
+    AppSettings,
+    normalize_analysis_count_threshold,
+    normalize_analysis_schedule_mode,
+    normalize_analysis_time_seconds,
+    resolved_keylog_path,
+)
 
 INTERVAL_TIERS_SECONDS = (600, 1800, 3600, 7200, 18000, 28800, 43200)
-DEFAULT_INTERVAL_SECONDS = 1800
+DEFAULT_INTERVAL_SECONDS = 600
+COUNT_MODE_POLL_INTERVAL_SECONDS = 600
 MAX_KEYLOG_BATCH_ENTRIES = 5000
 SCHEDULER_STATE_FILE = "analysis-scheduler.json"
 
@@ -97,7 +104,7 @@ class AdaptiveAnalysisScheduler:
             existing_rules = list_rules(conn)
 
         activity_count = len(keylog_entries) + len(new_events)
-        next_interval = choose_next_interval(activity_count, state.next_interval_seconds)
+        next_interval = choose_next_interval_for_settings(self.settings, activity_count, state.next_interval_seconds)
         base_state = AnalysisSchedulerState(
             last_keylog_offset=next_offset,
             last_analyzed_event_id=state.last_analyzed_event_id,
@@ -112,6 +119,24 @@ class AdaptiveAnalysisScheduler:
         if not new_events and not keylog_entries and (not force or (not events and not existing_rules)):
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, 0, 0, next_interval, "No new typing activity")
+
+        if not force and should_wait_for_count_threshold(self.settings, activity_count):
+            wait_state = AnalysisSchedulerState(
+                last_keylog_offset=state.last_keylog_offset,
+                last_analyzed_event_id=state.last_analyzed_event_id,
+                next_interval_seconds=next_interval,
+                last_run_at=time.time(),
+            )
+            save_scheduler_state(wait_state, self.state_path)
+            threshold = normalize_analysis_count_threshold(self.settings.analysis_schedule_count_threshold)
+            return AnalysisRunResult(
+                False,
+                0,
+                len(keylog_entries),
+                len(new_events),
+                next_interval,
+                f"Waiting for more typing activity ({activity_count}/{threshold})",
+            )
 
         keylog_payload = keylog_payload_for_settings(self.settings, keylog_entries)
         events_for_provider = events_for_analysis(events, new_events, keylog_payload, force=force)
@@ -456,6 +481,26 @@ def choose_next_interval(activity_count: int, current_interval: int = DEFAULT_IN
     if activity_count >= 20:
         return 3600
     return 7200
+
+
+def choose_next_interval_for_settings(
+    settings: AppSettings,
+    activity_count: int,
+    current_interval: int = DEFAULT_INTERVAL_SECONDS,
+) -> int:
+    mode = normalize_analysis_schedule_mode(settings.analysis_schedule_mode)
+    if mode == "count":
+        return COUNT_MODE_POLL_INTERVAL_SECONDS
+    fixed_seconds = normalize_analysis_time_seconds(settings.analysis_schedule_time_seconds)
+    if fixed_seconds > 0:
+        return fixed_seconds
+    return choose_next_interval(activity_count, current_interval)
+
+
+def should_wait_for_count_threshold(settings: AppSettings, activity_count: int) -> bool:
+    if normalize_analysis_schedule_mode(settings.analysis_schedule_mode) != "count":
+        return False
+    return activity_count < normalize_analysis_count_threshold(settings.analysis_schedule_count_threshold)
 
 
 def read_keylog_entries_since(path: Path, offset: int, limit: int = MAX_KEYLOG_BATCH_ENTRIES) -> tuple[list[KeyLogEntry], int]:

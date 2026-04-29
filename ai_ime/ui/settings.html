@@ -204,6 +204,31 @@
               </span>
               <input id="auto_analyze_with_ai" type="checkbox" />
             </label>
+            <div class="schedule-control">
+              <div>
+                <strong>自动提交规则</strong>
+                <button
+                  class="help-tip"
+                  id="analysisScheduleHelp"
+                  type="button"
+                  data-help="默认选项沿用 AI IME 原本的自适应规则：有大量键入时最快 10 分钟分析一次；没有新日志时自动进入更长间隔。也可以固定为 10 分钟到 12 小时。"
+                >?</button>
+                <small id="analysisScheduleHint">默认自适应：最快 10 分钟；没有新日志时逐步降到 30 分钟、1 小时、2 小时等。</small>
+              </div>
+              <div class="schedule-controls">
+                <div class="schedule-mode-toggle" id="analysisScheduleModeToggle" data-mode="time" aria-label="自动提交触发方式">
+                  <button class="active" type="button" data-schedule-mode="time">时间</button>
+                  <button type="button" data-schedule-mode="count">日志数量</button>
+                </div>
+                <label class="schedule-select" for="analysis_schedule_select">
+                  <span id="analysisScheduleSelectLabel">提交间隔</span>
+                  <select id="analysis_schedule_select"></select>
+                </label>
+              </div>
+            </div>
+            <input id="analysis_schedule_mode" type="hidden" />
+            <input id="analysis_schedule_time_seconds" type="hidden" />
+            <input id="analysis_schedule_count_threshold" type="hidden" />
             <div class="analysis-actions">
               <div>
                 <strong>立即提交本段日志</strong>

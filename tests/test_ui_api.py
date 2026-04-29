@@ -48,6 +48,23 @@ class SettingsApiTests(unittest.TestCase):
 
         self.assertFalse(settings.record_full_keylog)
 
+    def test_settings_from_payload_preserves_analysis_schedule_config(self) -> None:
+        settings = _settings_from_payload(
+            {
+                "analysis_schedule_mode": "count",
+                "analysis_schedule_time_seconds": "3600",
+                "analysis_schedule_count_threshold": "3000",
+            }
+        )
+
+        self.assertEqual(settings.analysis_schedule_mode, "count")
+        self.assertEqual(settings.analysis_schedule_time_seconds, 3600)
+        self.assertEqual(settings.analysis_schedule_count_threshold, 3000)
+        payload = _settings_payload(settings)
+        self.assertEqual(payload["analysis_schedule_mode"], "count")
+        self.assertEqual(payload["analysis_schedule_time_seconds"], 3600)
+        self.assertEqual(payload["analysis_schedule_count_threshold"], 3000)
+
     def test_save_settings_preserves_existing_env_key_when_api_key_blank(self) -> None:
         old_local_app_data = os.environ.get("LOCALAPPDATA")
         old_key = os.environ.get("AI_IME_OPENAI_API_KEY")
