@@ -610,6 +610,49 @@ class AnalysisSchedulerTests(unittest.TestCase):
             self.assertEqual(result.deleted_rules, 0)
             self.assertEqual(len(remaining), 1)
 
+    def test_run_once_uploads_existing_rules_at_most_three_times(self) -> None:
+        class CountingProvider:
+            def __init__(self) -> None:
+                self.existing_rules: list[LearnedRule] = []
+
+            def analyze_events(self, events, keylog_entries=None, existing_rules=None):
+                self.existing_rules = list(existing_rules or [])
+                return ProviderAnalysis(rules=[], invalid_rules=[])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "ai-ime.db"
+            keylog_path = Path(tmp) / "keylog.jsonl"
+            state_path = Path(tmp) / "analysis.json"
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                upsert_rules(
+                    conn,
+                    [
+                        LearnedRule("xainzai", "xianzai", "鐜板湪", 0.85, 145000, 2, "adjacent_transposition"),
+                        LearnedRule("xianzi", "xianzai", "鐜板湪", 0.8, 141000, 1, "missing_letter"),
+                    ],
+                )
+                rule_ids = [rule.id for rule in list_rules(conn)]
+                conn.execute("UPDATE learned_rules SET analysis_upload_count = 2 WHERE id = ?", (rule_ids[0],))
+                conn.execute("UPDATE learned_rules SET analysis_upload_count = 3 WHERE id = ?", (rule_ids[1],))
+                conn.commit()
+            provider = CountingProvider()
+            settings = AppSettings(auto_analyze_with_ai=True, provider="openai-compatible", keylog_file=str(keylog_path))
+            scheduler = AdaptiveAnalysisScheduler(settings, db_path=db_path, state_path=state_path)
+
+            with patch("ai_ime.analysis_scheduler._build_provider", return_value=provider), patch(
+                "ai_ime.analysis_scheduler._append_learning_log"
+            ):
+                result = scheduler.run_once(force=True)
+
+            with closing(connect(db_path)) as conn:
+                init_db(conn)
+                remaining = list_rules(conn)
+            self.assertTrue(result.attempted)
+            self.assertEqual([rule.id for rule in provider.existing_rules], [rule_ids[0]])
+            self.assertEqual(result.sent_existing_rule_count, 1)
+            self.assertEqual([(rule.id, rule.analysis_upload_count) for rule in remaining], [(rule_ids[0], 3), (rule_ids[1], 3)])
+
     def test_run_once_keeps_keylog_offset_when_provider_fails(self) -> None:
         class FailingProvider:
             def analyze_events(self, events, keylog_entries=None):

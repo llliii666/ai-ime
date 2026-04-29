@@ -543,6 +543,7 @@ def _rule_payload(rule: LearnedRule) -> dict[str, Any]:
         "confidence": rule.confidence,
         "weight": rule.weight,
         "count": rule.count,
+        "analysisUploadCount": rule.analysis_upload_count,
         "provider": rule.provider,
         "mistakeType": rule.mistake_type,
         "explanation": rule.explanation,

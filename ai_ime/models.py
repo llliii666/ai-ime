@@ -31,6 +31,7 @@ class LearnedRule:
     enabled: bool = True
     id: int | None = None
     last_seen_at: str | None = None
+    analysis_upload_count: int = 0
 
 
 @dataclass(frozen=True)
