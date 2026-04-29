@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ai_ime.correction.detector import KeyStroke
 from ai_ime.listener import (
+    BufferedKeyLogWriter,
     KeyLogEntry,
     KeyLogWriter,
     keyboard_name_to_stroke,
@@ -93,6 +94,21 @@ class ListenerTests(unittest.TestCase):
             writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="1"))
 
             self.assertEqual(keylog_to_sequence(path), "xainzai{backspace}x{1}")
+
+    def test_buffered_key_log_writer_flushes_to_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "keylog.jsonl"
+            writer = BufferedKeyLogWriter(path, flush_interval=0.01, max_batch_size=2)
+
+            try:
+                writer.write(KeyLogEntry(timestamp=1.0, event_type="down", name="x"))
+                writer.write(KeyLogEntry(timestamp=2.0, event_type="down", name="1"))
+                writer.flush()
+            finally:
+                writer.close()
+
+            entries = read_keylog(path)
+            self.assertEqual([entry.name for entry in entries], ["x", "1"])
 
 
 if __name__ == "__main__":

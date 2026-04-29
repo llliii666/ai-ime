@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import ipaddress
 import json
 import threading
 import time
@@ -9,6 +10,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from ai_ime.config import default_data_dir, default_db_path
 from ai_ime.correction.normalize import normalize_pinyin
@@ -219,7 +221,24 @@ class AdaptiveAnalysisScheduler:
 
 
 def should_send_keylog_entries(settings: AppSettings) -> bool:
-    return settings.provider == "ollama" or settings.send_full_keylog
+    if settings.send_full_keylog:
+        return True
+    if settings.provider != "ollama":
+        return False
+    return _is_loopback_base_url(settings.ollama_base_url)
+
+
+def _is_loopback_base_url(base_url: str) -> bool:
+    parsed = urlparse(base_url.strip())
+    hostname = (parsed.hostname or "").strip().lower()
+    if not hostname:
+        return False
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
 
 
 def _deploy_enabled_rules(settings: AppSettings, db_path: Path) -> tuple[bool, bool]:

@@ -151,6 +151,16 @@ class RimeDeployTests(unittest.TestCase):
         self.assertEqual(merged.count("schema/dependencies/@next: ai_typo"), 1)
         self.assertIn("menu/page_size: 9", merged)
 
+    def test_deploy_rejects_invalid_schema_identifier(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "identifier"):
+                deploy_rime_files(sample_rules(), Path(tmp), schema_id="../evil")
+
+    def test_deploy_rejects_invalid_dictionary_identifier(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "identifier"):
+                deploy_rime_files(sample_rules(), Path(tmp), dictionary_id="bad/name")
+
 
 if __name__ == "__main__":
     unittest.main()

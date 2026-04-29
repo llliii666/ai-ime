@@ -53,7 +53,16 @@ class AnalysisSchedulerTests(unittest.TestCase):
         self.assertEqual(choose_next_interval(0, 43200), 43200)
 
     def test_should_send_keylogs_for_local_or_user_opt_in(self) -> None:
-        self.assertTrue(should_send_keylog_entries(AppSettings(provider="ollama", send_full_keylog=False)))
+        self.assertTrue(
+            should_send_keylog_entries(
+                AppSettings(provider="ollama", ollama_base_url="http://127.0.0.1:11434", send_full_keylog=False)
+            )
+        )
+        self.assertFalse(
+            should_send_keylog_entries(
+                AppSettings(provider="ollama", ollama_base_url="http://192.168.1.10:11434", send_full_keylog=False)
+            )
+        )
         self.assertTrue(should_send_keylog_entries(AppSettings(provider="openai-compatible", send_full_keylog=True)))
         self.assertFalse(should_send_keylog_entries(AppSettings(provider="openai-compatible", send_full_keylog=False)))
 

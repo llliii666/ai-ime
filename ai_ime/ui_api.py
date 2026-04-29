@@ -414,7 +414,7 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
         auto_learn_enabled=_as_bool(payload.get("auto_learn_enabled"), True),
         auto_analyze_with_ai=_as_bool(payload.get("auto_analyze_with_ai"), False),
         auto_deploy_rime=_as_bool(payload.get("auto_deploy_rime"), True),
-        record_full_keylog=_as_bool(payload.get("record_full_keylog"), True),
+        record_full_keylog=_as_bool(payload.get("record_full_keylog"), False),
         record_candidate_commits=_as_bool(payload.get("record_candidate_commits"), True),
         send_full_keylog=_as_bool(payload.get("send_full_keylog"), False),
         delete_sent_keylog=_as_bool(payload.get("delete_sent_keylog"), True),

@@ -4,7 +4,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_ime.runtime import acquire_single_instance, clear_pid_file, is_pid_running, read_pid_file, write_pid_file
+from ai_ime.runtime import (
+    PidRecord,
+    acquire_single_instance,
+    clear_pid_file,
+    is_pid_running,
+    pid_record_matches_process,
+    read_pid_file,
+    read_pid_record,
+    write_pid_file,
+)
 
 
 class FakeKernel32:
@@ -34,9 +43,32 @@ class RuntimeTests(unittest.TestCase):
 
             write_pid_file(path)
             self.assertEqual(read_pid_file(path), os.getpid())
+            self.assertEqual(read_pid_record(path).pid, os.getpid())
             self.assertTrue(is_pid_running(os.getpid()))
             clear_pid_file(path, expected_pid=os.getpid())
             self.assertIsNone(read_pid_file(path))
+
+    def test_read_pid_record_supports_legacy_plain_pid_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ai-ime.pid"
+            path.write_text("1234", encoding="utf-8")
+
+            self.assertEqual(read_pid_record(path), PidRecord(pid=1234))
+
+    def test_pid_record_matches_process_checks_start_time_when_present(self) -> None:
+        record = PidRecord(pid=1234, started_at=99)
+
+        with patch("ai_ime.runtime.is_pid_running", return_value=True), patch(
+            "ai_ime.runtime.process_started_at",
+            return_value=99,
+        ):
+            self.assertTrue(pid_record_matches_process(record))
+
+        with patch("ai_ime.runtime.is_pid_running", return_value=True), patch(
+            "ai_ime.runtime.process_started_at",
+            return_value=100,
+        ):
+            self.assertFalse(pid_record_matches_process(record))
 
     def test_windows_single_instance_mutex_rejects_existing_instance(self) -> None:
         kernel32 = FakeKernel32(last_error=183)

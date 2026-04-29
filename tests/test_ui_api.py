@@ -43,6 +43,11 @@ class SettingsApiTests(unittest.TestCase):
         self.assertEqual(settings.provider_preset, "deepseek")
         self.assertEqual(settings.openai_model, "deepseek-v4-flash")
 
+    def test_settings_from_payload_defaults_full_keylog_to_false(self) -> None:
+        settings = _settings_from_payload({})
+
+        self.assertFalse(settings.record_full_keylog)
+
     def test_save_settings_preserves_existing_env_key_when_api_key_blank(self) -> None:
         old_local_app_data = os.environ.get("LOCALAPPDATA")
         old_key = os.environ.get("AI_IME_OPENAI_API_KEY")

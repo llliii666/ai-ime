@@ -20,6 +20,7 @@ from ai_ime.rime.generator import (
     render_schema_patch,
     render_support_schema,
     render_typo_translator_patch,
+    validate_rime_identifier,
 )
 
 MANIFEST_FILE = "manifest.json"
@@ -47,12 +48,16 @@ def deploy_rime_files(
     semantic_logger_enabled: bool = True,
 ) -> DeploymentResult:
     rime_dir.mkdir(parents=True, exist_ok=True)
+    schema_id = validate_rime_identifier(schema_id, "schema")
+    dictionary_id = validate_rime_identifier(dictionary_id, "dictionary")
+    if base_dictionary.strip():
+        validate_rime_identifier(base_dictionary.strip(), "base dictionary")
     backup_dir = _create_backup_dir(rime_dir)
-    dictionary_path = rime_dir / f"{dictionary_id}.dict.yaml"
-    support_schema_path = rime_dir / f"{dictionary_id}.schema.yaml"
-    patch_path = rime_dir / f"{schema_id}.custom.yaml"
-    lua_path = rime_dir / "lua" / "ai_ime_logger.lua"
-    rime_lua_path = rime_dir / "rime.lua"
+    dictionary_path = _safe_rime_output_path(rime_dir, f"{dictionary_id}.dict.yaml")
+    support_schema_path = _safe_rime_output_path(rime_dir, f"{dictionary_id}.schema.yaml")
+    patch_path = _safe_rime_output_path(rime_dir, f"{schema_id}.custom.yaml")
+    lua_path = _safe_rime_output_path(rime_dir, "lua/ai_ime_logger.lua")
+    rime_lua_path = _safe_rime_output_path(rime_dir, "rime.lua")
     log_path = semantic_log_path or default_data_dir() / "keylog.jsonl"
 
     manifest = {"files": []}
@@ -101,6 +106,7 @@ def deploy_rime_files(
 
 
 def merge_schema_patch(content: str, dictionary_id: str = "ai_typo") -> str:
+    dictionary_id = validate_rime_identifier(dictionary_id, "dictionary")
     lines = content.splitlines()
     patch_index = _find_top_level_patch(lines)
 
@@ -259,6 +265,14 @@ def _write_manifest(backup_dir: Path, manifest: dict[str, list[dict[str, object]
         encoding="utf-8",
         newline="\n",
     )
+
+
+def _safe_rime_output_path(rime_dir: Path, relative_path: str) -> Path:
+    root = rime_dir.resolve()
+    path = (rime_dir / relative_path).resolve()
+    if path.parent != root and root not in path.parents:
+        raise ValueError(f"Resolved Rime output path escapes user directory: {relative_path}")
+    return path
 
 
 def _render_ai_schema_patch_body(dictionary_id: str) -> str:

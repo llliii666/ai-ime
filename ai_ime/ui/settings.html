@@ -183,8 +183,8 @@
             <label class="switch-row">
               <span>
                 <strong>允许云端/中转模型接收完整键入日志</strong>
-                <button class="help-tip" type="button" data-help="开启后 OpenAI 兼容接口和中转站也能收到完整键盘日志。涉及隐私，默认关闭。">?</button>
-                <small>本地模型不受该开关限制，云端模型默认不发送完整日志。</small>
+                <button class="help-tip" type="button" data-help="开启后 OpenAI 兼容接口和中转站也能收到完整键盘日志。涉及隐私，默认关闭。只有指向本机 localhost、127.0.0.1 或 ::1 的 Ollama 会绕过这个开关。">?</button>
+                <small>云端模型默认不发送完整日志；只有本机 loopback Ollama 会默认携带完整日志。</small>
               </span>
               <input id="send_full_keylog" type="checkbox" />
             </label>
@@ -200,15 +200,15 @@
               <span>
                 <strong>自动调用模型分析纠错事件</strong>
                 <button class="help-tip" type="button" data-help="后台按自适应间隔批量发送纠错事件。开启日志清理时，分析成功后会移除已处理 keylog 前缀；失败时不会删除。">?</button>
-                <small>开启后后台按自适应间隔批量发送；云端默认不带完整键盘日志。</small>
+                <small>开启后后台按自适应间隔批量发送；云端和远程 Ollama 默认不带完整键盘日志。</small>
               </span>
               <input id="auto_analyze_with_ai" type="checkbox" />
             </label>
             <div class="analysis-actions">
               <div>
                 <strong>立即提交本段日志</strong>
-                <button class="help-tip" type="button" data-help="不等待后台定时任务，立即把可提交的纠错事件发送给当前模型。Ollama 会按本地模型策略接收完整日志；云端和中转站只有在上方开关开启时才会接收完整键盘日志。">?</button>
-                <small>用于手动验证模型返回的规则，也能查看哪些规则被本地证据校验拒绝。</small>
+                <button class="help-tip" type="button" data-help="不等待后台定时任务，立即把可提交的纠错事件发送给当前模型。只有指向本机 localhost、127.0.0.1 或 ::1 的 Ollama 会默认接收完整日志；云端、中转站和远程 Ollama 只有在上方开关开启时才会接收完整键盘日志。">?</button>
+                <small>用于手动验证模型返回的规则，也能查看哪些规则被本地证据校验拒绝；只有本机 loopback Ollama 会默认携带完整日志。</small>
               </div>
               <button class="primary" id="runAnalysisNow">立即提交</button>
               <span class="connection-state" id="analysisNowState">等待提交</span>
@@ -217,7 +217,7 @@
           </div>
           <div class="notice">
             <strong>当前策略</strong>
-            <span>Ollama 等本地模型可使用完整日志；OpenAI 兼容接口是否上传完整日志由上方开关控制。</span>
+            <span>只有本机 loopback Ollama 会默认使用完整日志；OpenAI 兼容接口和远程 Ollama 是否上传完整日志由上方开关控制。</span>
           </div>
         </section>
 
