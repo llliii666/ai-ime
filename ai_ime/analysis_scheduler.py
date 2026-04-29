@@ -15,7 +15,15 @@ from urllib.parse import urlparse
 from ai_ime.config import default_data_dir, default_db_path
 from ai_ime.correction.normalize import normalize_pinyin
 from ai_ime.correction.rules import classify_mistake, event_supports_rule
-from ai_ime.db import connect, delete_rule, init_db, list_events, list_rules, upsert_rules
+from ai_ime.db import (
+    connect,
+    delete_rule,
+    increment_rule_analysis_upload_counts,
+    init_db,
+    list_events,
+    list_rules,
+    upsert_rules,
+)
 from ai_ime.learning import _append_learning_log, _build_provider
 from ai_ime.listener import KeyLogEntry, keyboard_name_to_stroke, keylog_file_lock
 from ai_ime.models import CorrectionEvent, LearnedRule, ProviderAnalysis, RuleAuditFinding
@@ -35,6 +43,7 @@ DEFAULT_INTERVAL_SECONDS = 600
 COUNT_MODE_POLL_INTERVAL_SECONDS = 600
 MAX_KEYLOG_BATCH_ENTRIES = 5000
 SCHEDULER_STATE_FILE = "analysis-scheduler.json"
+MAX_RULE_ANALYSIS_UPLOAD_COUNT = 3
 
 
 @dataclass(frozen=True)
@@ -102,6 +111,7 @@ class AdaptiveAnalysisScheduler:
             events = list_events(conn)
             new_events = [event for event in events if (event.id or 0) > state.last_analyzed_event_id]
             existing_rules = list_rules(conn)
+            uploadable_existing_rules = list_rules(conn, max_analysis_upload_count=MAX_RULE_ANALYSIS_UPLOAD_COUNT)
 
         activity_count = len(keylog_entries) + len(new_events)
         next_interval = choose_next_interval_for_settings(self.settings, activity_count, state.next_interval_seconds)
@@ -140,7 +150,7 @@ class AdaptiveAnalysisScheduler:
 
         keylog_payload = keylog_payload_for_settings(self.settings, keylog_entries)
         events_for_provider = events_for_analysis(events, new_events, keylog_payload, force=force)
-        rules_for_provider = existing_rules if (events_for_provider or keylog_payload or force) else []
+        rules_for_provider = uploadable_existing_rules if (events_for_provider or keylog_payload or force) else []
         if not events_for_provider and not keylog_payload and not rules_for_provider:
             save_scheduler_state(base_state, self.state_path)
             return AnalysisRunResult(False, 0, len(keylog_entries), 0, next_interval, "No correction events to analyze")
@@ -167,6 +177,7 @@ class AdaptiveAnalysisScheduler:
         deleted_rule_items: list[RuleAuditFinding]
         with closing(connect(self.db_path)) as conn:
             init_db(conn)
+            increment_rule_analysis_upload_counts(conn, [rule.id for rule in rules_for_provider])
             upserted = upsert_rules(conn, accepted_rules)
             deleted_rule_items = delete_rules_from_audit_findings(conn, provider_result.invalid_rules, existing_rules)
             deleted_rules = len(deleted_rule_items)

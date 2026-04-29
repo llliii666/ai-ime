@@ -171,12 +171,16 @@ class SettingsApiTests(unittest.TestCase):
                         ],
                     )
 
+                    conn.execute("UPDATE learned_rules SET analysis_upload_count = 2 WHERE wrong_pinyin = ?", ("anil",))
+                    conn.commit()
+
                 response = api.list_correction_records("pinyin")
 
                 self.assertTrue(response["ok"])
                 self.assertEqual([event["wrongPinyin"] for event in response["events"]], ["anil", "zuihuo"])
                 self.assertEqual(len(response["rules"]), 1)
                 self.assertEqual(response["rules"][0]["committedText"], "案例")
+                self.assertEqual(response["rules"][0]["analysisUploadCount"], 2)
                 self.assertIn("storagePaths", api.load_state()["meta"])
         finally:
             if old_local_app_data is None:

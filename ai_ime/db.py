@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .models import CorrectionEvent, LearnedRule
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -49,6 +49,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             provider TEXT NOT NULL DEFAULT 'rule',
             explanation TEXT NOT NULL DEFAULT '',
             enabled INTEGER NOT NULL DEFAULT 1,
+            analysis_upload_count INTEGER NOT NULL DEFAULT 0,
             last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE (wrong_pinyin, correct_pinyin, committed_text, provider)
         );
@@ -70,6 +71,9 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     event_columns = {row["name"] for row in conn.execute("PRAGMA table_info(correction_events)").fetchall()}
     if "wrong_committed_text" not in event_columns:
         conn.execute("ALTER TABLE correction_events ADD COLUMN wrong_committed_text TEXT")
+    rule_columns = {row["name"] for row in conn.execute("PRAGMA table_info(learned_rules)").fetchall()}
+    if "analysis_upload_count" not in rule_columns:
+        conn.execute("ALTER TABLE learned_rules ADD COLUMN analysis_upload_count INTEGER NOT NULL DEFAULT 0")
 
 
 def insert_event(conn: sqlite3.Connection, event: CorrectionEvent) -> int:
@@ -215,8 +219,19 @@ def upsert_rules(conn: sqlite3.Connection, rules: Iterable[LearnedRule]) -> int:
     return count
 
 
-def list_rules(conn: sqlite3.Connection, enabled_only: bool = False) -> list[LearnedRule]:
-    where = "WHERE enabled = 1" if enabled_only else ""
+def list_rules(
+    conn: sqlite3.Connection,
+    enabled_only: bool = False,
+    max_analysis_upload_count: int | None = None,
+) -> list[LearnedRule]:
+    conditions: list[str] = []
+    params: list[int] = []
+    if enabled_only:
+        conditions.append("enabled = 1")
+    if max_analysis_upload_count is not None:
+        conditions.append("analysis_upload_count < ?")
+        params.append(max_analysis_upload_count)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     rows = conn.execute(
         f"""
         SELECT
@@ -231,11 +246,13 @@ def list_rules(conn: sqlite3.Connection, enabled_only: bool = False) -> list[Lea
             provider,
             explanation,
             enabled,
+            analysis_upload_count,
             last_seen_at
         FROM learned_rules
         {where}
         ORDER BY enabled DESC, confidence DESC, count DESC, id ASC
-        """
+        """,
+        tuple(params),
     ).fetchall()
     return [
         LearnedRule(
@@ -251,9 +268,27 @@ def list_rules(conn: sqlite3.Connection, enabled_only: bool = False) -> list[Lea
             explanation=row["explanation"],
             enabled=bool(row["enabled"]),
             last_seen_at=row["last_seen_at"],
+            analysis_upload_count=int(row["analysis_upload_count"]),
         )
         for row in rows
     ]
+
+
+def increment_rule_analysis_upload_counts(conn: sqlite3.Connection, rule_ids: Iterable[int | None]) -> int:
+    normalized_ids = sorted({int(rule_id) for rule_id in rule_ids if rule_id is not None})
+    if not normalized_ids:
+        return 0
+    placeholders = ",".join("?" for _ in normalized_ids)
+    cursor = conn.execute(
+        f"""
+        UPDATE learned_rules
+        SET analysis_upload_count = analysis_upload_count + 1
+        WHERE id IN ({placeholders})
+        """,
+        tuple(normalized_ids),
+    )
+    conn.commit()
+    return cursor.rowcount
 
 
 def set_rule_enabled(conn: sqlite3.Connection, rule_id: int, enabled: bool) -> bool:

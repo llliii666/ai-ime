@@ -6,6 +6,7 @@ from ai_ime.db import (
     clear_events,
     delete_event,
     delete_rule,
+    increment_rule_analysis_upload_counts,
     init_db,
     insert_event,
     list_events,
@@ -36,6 +37,30 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(len(stored_rules), 1)
         self.assertEqual(stored_rules[0].wrong_pinyin, "xainzai")
         self.assertEqual(stored_rules[0].committed_text, "现在")
+        self.assertEqual(stored_rules[0].analysis_upload_count, 0)
+
+    def test_rule_analysis_upload_count_filters_and_increments(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+
+        upsert_rules(
+            conn,
+            [
+                LearnedRule("xainzai", "xianzai", "鐜板湪", 0.8, 141000, 1, "manual"),
+                LearnedRule("xianzi", "xianzai", "鐜板湪", 0.8, 141000, 1, "manual"),
+            ],
+        )
+        first_id, second_id = [rule.id for rule in list_rules(conn)]
+        self.assertIsNotNone(first_id)
+        self.assertIsNotNone(second_id)
+
+        increment_rule_analysis_upload_counts(conn, [first_id, first_id, second_id])
+        increment_rule_analysis_upload_counts(conn, [first_id])
+        increment_rule_analysis_upload_counts(conn, [first_id])
+
+        uploadable = list_rules(conn, max_analysis_upload_count=3)
+        self.assertEqual([(rule.id, rule.analysis_upload_count) for rule in uploadable], [(second_id, 1)])
 
     def test_rule_management_and_event_cleanup(self) -> None:
         conn = sqlite3.connect(":memory:")

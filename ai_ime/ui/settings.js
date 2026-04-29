@@ -805,7 +805,15 @@ function renderRecordMeta(record, index = 0) {
   const displayNumber = typeof index === "number" ? index + 1 : 1;
   if (activeRecordKind === "rules") {
     const confidence = Number(record.confidence || 0);
-    meta.appendChild(recordMetaLine(`规则 #${displayNumber}`, `ID ${record.id ?? "-"} · ${record.provider || "rule"} · ${record.count || 0} 次 · ${(confidence * 100).toFixed(0)}%`));
+    const analysisUploadCount = Math.min(Number(record.analysisUploadCount || 0), 3);
+    const detail = [
+      `ID ${record.id ?? "-"}`,
+      record.provider || "rule",
+      `${record.count || 0} 次`,
+      `AI 复审 ${analysisUploadCount}/3`,
+      `${(confidence * 100).toFixed(0)}%`,
+    ].join(" · ");
+    meta.appendChild(recordMetaLine(`规则 #${displayNumber}`, detail));
     meta.appendChild(recordSmall(record.lastSeenAt || ""));
   } else {
     meta.appendChild(recordMetaLine(`事件 #${displayNumber}`, `ID ${record.id ?? "-"} · ${record.source || "unknown"} · ${record.commitKey || "unknown"}`));
